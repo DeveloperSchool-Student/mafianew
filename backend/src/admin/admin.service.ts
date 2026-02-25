@@ -288,6 +288,12 @@ export class AdminService {
     });
     if (!target) throw new NotFoundException('Користувача не знайдено');
 
+    const power = getStaffPower(requestUser.staffRoleKey);
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= power && power < 9) {
+      throw new ForbiddenException('Не можна знімати покарання з адміна рівного або вищого за вас.');
+    }
+
     if (params.type === 'BAN') {
       await this.prisma.profile.update({
         where: { userId: target.id },
@@ -325,6 +331,12 @@ export class AdminService {
       where: { username: params.targetUsername },
     });
     if (!target) throw new NotFoundException('Користувача не знайдено');
+
+    const power = getStaffPower(requestUser.staffRoleKey);
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= power && power < 9) {
+      throw new ForbiddenException('Не можна змінювати золото адміну рівному або вищому за вас.');
+    }
     await this.prisma.wallet.update({
       where: { userId: target.id },
       data: { soft: { increment: params.delta } },
@@ -348,6 +360,12 @@ export class AdminService {
       where: { username: params.targetUsername },
     });
     if (!target) throw new NotFoundException('Користувача не знайдено');
+
+    const power = getStaffPower(requestUser.staffRoleKey);
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= power && power < 9) {
+      throw new ForbiddenException('Не можна змінювати досвід адміну рівному або вищому за вас.');
+    }
 
     const profile = await this.prisma.profile.findUnique({
       where: { userId: target.id },
@@ -393,6 +411,12 @@ export class AdminService {
       where: { username: params.targetUsername },
     });
     if (!target) throw new NotFoundException('Користувача не знайдено');
+
+    const power = getStaffPower(requestUser.staffRoleKey);
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= power && power < 9) {
+      throw new ForbiddenException('Не можна змінювати нікнейм адміну рівному або вищому за вас.');
+    }
 
     const username = params.newUsername.trim();
     if (username.length < 3 || username.length > 20) {

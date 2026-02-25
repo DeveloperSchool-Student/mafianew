@@ -134,6 +134,41 @@ export function Guide() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Додаткові ролі */}
+                            <div className="col-span-1 md:col-span-2 bg-[#111] p-5 rounded-lg border border-gray-700/50 mt-2">
+                                <h3 className="font-bold text-gray-400 text-xl border-b border-gray-700 pb-2 mb-4">⚙️ Додаткові ролі (Залежить від налаштувань)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <div className="font-bold text-blue-400">Охоронець (Bodyguard)</div>
+                                        <p className="text-gray-400">Мирна роль. Вночі захищає гравця. Якщо на ціль нападають, захищає її, але сам може загинути разом з нападником.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-blue-300">Слідопит (Tracker)</div>
+                                        <p className="text-gray-400">Мирна роль. Вночі слідкує за одним гравцем і дізнається, кого той відвідував.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-blue-200">Інформатор (Informer)</div>
+                                        <p className="text-gray-400">Мирна роль. Збирає конфіденційну інформацію про ролі гравців або події вночі.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-yellow-600">Суддя (Judge)</div>
+                                        <p className="text-gray-400">Може анонімно вплинути на результати денного голосування та самостійно винести вердикт.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-red-700">Підривник (Bomber)</div>
+                                        <p className="text-gray-400">Небезпечна роль. Вночі закладає вибухівку, яка може здетонувати і знищити кількох гравців.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-green-700">Трапер (Trapper)</div>
+                                        <p className="text-gray-400">Ставить пастки біля будинку гравця. Той, хто першим прийде до нього вночі — потрапить у пастку.</p>
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-pink-400">Коханці (Lovers)</div>
+                                        <p className="text-gray-400">Двоє гравців, які знають одне одного і мають вижити разом. Якщо один з коханців гине — інший помирає від розбитого серця.</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
@@ -150,8 +185,40 @@ export function Guide() {
                             <p className="text-xs text-gray-500 mt-4">* Якщо вас заблокував Ескорт, ваша дія (навіть вбивство) не спрацює!</p>
                         </div>
                     </section>
+
+                    <section className="mb-4 relative z-10">
+                        <h2 className="text-2xl font-bold text-mafia-light mb-4 flex items-center gap-2 border-b border-gray-800 pb-2">
+                            <Users className="text-red-500" /> 5. Правила поведінки
+                        </h2>
+                        <div className="bg-[#111] p-6 rounded-lg text-gray-300 space-y-4 text-sm xl:text-base border border-red-900/30">
+                            <div>
+                                <h3 className="font-bold text-red-400">5.1. Повага до гравців</h3>
+                                <p className="text-gray-400">Заборонені будь-які прямі образи, розпалювання ворожнечі, погрози в бік інших гравців чи адміністрації.</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-red-400">5.2. Спам та Флуд</h3>
+                                <p className="text-gray-400">Заборонено засмічувати чат беззмістовними повідомленнями, рекламою, або надсилати одне й те саме повідомлення багато разів підряд.</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-red-400">5.3. Чесна гра (Без читів / Багоюзу)</h3>
+                                <p className="text-gray-400">Суворо заборонено використовувати стороннє ПЗ, скрипти або баги гри для отримання переваги. Про всі баги слід повідомляти адміністрацію.</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-red-400">5.4. Гра в команді (Злив інфи)</h3>
+                                <p className="text-gray-400">Заборонено навмисно піддаватися, зливати ролі своїх напарників (якщо ви мафія), або "грати по дискорду" (отримувати інформацію поза ігровим чатом).</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-red-400">5.5. Відмовляння від гри / AFK</h3>
+                                <p className="text-gray-400">Входити в кімнату і стояти AFK без попередження, спеціальне самогубство чи вихід з гри заради псування досвіду іншим - карається.</p>
+                            </div>
+                            <div className="mt-4 p-3 bg-red-900/20 border-l-4 border-mafia-red rounded">
+                                <p className="text-sm font-bold text-mafia-light">УВАГА:</p>
+                                <p className="text-xs text-gray-400">Адміністрація має право видавати покарання (Мут, Кік, Бан) на свій розсуд, спираючись на ці правила. Рішення Власника та Старшої адміністрації є остаточними.</p>
+                            </div>
+                        </div>
+                    </section>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

@@ -30,7 +30,7 @@ function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-type Tab = 'reports' | 'users' | 'staff' | 'logs';
+type Tab = 'reports' | 'users' | 'staff' | 'logs' | 'duties';
 
 export function AdminPage() {
     const { user } = useAppStore();
@@ -52,6 +52,7 @@ export function AdminPage() {
         { key: 'users', label: t('admin.users'), icon: Users, minPower: 3 },
         { key: 'staff', label: t('admin.staff'), icon: UserCog, minPower: 8 },
         { key: 'logs', label: t('admin.logs'), icon: Activity, minPower: 7 },
+        { key: 'duties', label: 'Обов\'язки', icon: FileText, minPower: 1 },
     ];
 
     return (
@@ -108,6 +109,7 @@ export function AdminPage() {
                     {tab === 'users' && <UsersTab token={user.token} myPower={myPower} actionTarget={actionTarget} setActionTarget={setActionTarget} />}
                     {tab === 'staff' && <StaffTab token={user.token} myPower={myPower} />}
                     {tab === 'logs' && <LogsTab token={user.token} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
+                    {tab === 'duties' && <DutiesTab />}
                 </main>
             </div>
         </div>
@@ -560,6 +562,51 @@ function LogsTab({ token, onUserAction }: { token: string; onUserAction: (userna
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DUTIES TAB
+   ═══════════════════════════════════════════════════════════ */
+function DutiesTab() {
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6 text-yellow-400">⚖️ Права та обов'язки адміністратора</h2>
+            <div className="bg-[#111] p-6 rounded-lg border border-gray-800 space-y-6">
+                <section>
+                    <h3 className="text-lg font-bold text-red-400 mb-2">1. Загальні положення</h3>
+                    <ul className="list-disc list-inside text-gray-300 text-sm space-y-2">
+                        <li>Головна мета адміністратора — підтримувати порядок, комфортну гру та дотримання правил усіма гравцями.</li>
+                        <li>Адміністратор зобов'язаний бути ввічливим, компетентним та об'єктивним.</li>
+                        <li>Незнання цих правил не звільняє від відповідальності за їх порушення.</li>
+                    </ul>
+                </section>
+                <section>
+                    <h3 className="text-lg font-bold text-blue-400 mb-2">2. Обов'язки під час гри</h3>
+                    <ul className="list-disc list-inside text-gray-300 text-sm space-y-2">
+                        <li>Регулярно перевіряти систему скарг та обробляти їх оперативно.</li>
+                        <li>У разі виявлення порушень (особисто або через скарги) накладати покарання відповідно до серйозності проступку.</li>
+                        <li>Пояснювати гравцям причини їх покарання, якщо вони про це запитують в адекватній формі.</li>
+                        <li>Допомагати новачкам з питаннями щодо механік гри.</li>
+                    </ul>
+                </section>
+                <section>
+                    <h3 className="text-lg font-bold text-purple-400 mb-2">3. Заборони (що категорично не можна робити)</h3>
+                    <ul className="list-disc list-inside text-gray-300 text-sm space-y-2">
+                        <li><b className="text-red-300">Видавати покарання без причини або через особисту антипатію.</b></li>
+                        <li>Зливати ігрову ситуацію, підказувати гравцям їх ролі, або будь-яким іншим чином втручатися в хід гри, де ви є спостерігачем чи учасником.</li>
+                        <li>Ігнорувати скарги або масові порушення правил в кімнаті.</li>
+                        <li>Використовувати адмін-панель (зміну золота, досвіду, нікнеймів, або покарання) для власної вигоди або для розваги.</li>
+                        <li>Вступати в публічні конфлікти або скандали з гравцями від імені адміністрації.</li>
+                    </ul>
+                </section>
+                <div className="mt-8 p-4 bg-red-900/20 border-l-4 border-mafia-red rounded text-sm text-gray-300">
+                    <p className="font-bold text-white mb-1">Увага!</p>
+                    <p>Кожна ваша дія логується та може бути перевірена Старшою адміністрацією або Власником.</p>
+                    <p>Перевищення повноважень або порушення цих правил карається <b>попередженням</b>, <b>пониженням рангу</b> або <b>повним зняттям повноважень</b> з можливим блокуванням акаунту.</p>
+                </div>
+            </div>
         </div>
     );
 }
