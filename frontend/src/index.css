@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mafia-red: #cc0000;
+  --color-mafia-dark: #121212;
+  --color-mafia-gray: #242424;
+  --color-mafia-light: #e0e0e0;
+}
+
+body {
+  background-color: var(--color-mafia-dark);
+  color: var(--color-mafia-light);
+  font-family: 'Inter', "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", system-ui, -apple-system, sans-serif;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+
+  20% {
+    opacity: 1;
+    backdrop-filter: blur(10px);
+  }
+
+  80% {
+    opacity: 1;
+    backdrop-filter: blur(10px);
+  }
+
+  100% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+
+.phase-overlay-active {
+  animation: fadeInOut 3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}

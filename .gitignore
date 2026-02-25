@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Build
+backend/dist
+frontend/dist
+
+# Environment
+.env
+
+# Database
+*.db
+
+# IDE
+.vscode
+.idea
+.DS_Store
+*.suo
+*.sw?
+
+# Logs
+*.log
+
+# Agent/AI files
+.gemini
+.agents
+_agents

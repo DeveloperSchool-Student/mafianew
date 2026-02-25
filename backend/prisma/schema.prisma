@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  /// Роль для системи прав доступу (OWNER, ADMIN, USER тощо)
+  role      String   @default("USER")
+  /// Посада у штабі (зв'язок зі StaffRole)
+  staffRoleKey  String?
+  staffRole     StaffRole? @relation(fields: [staffRoleKey], references: [key])
+  lastLoginAt   DateTime?
+  profile   Profile?
+  wallet    Wallet?
+  ownedClans Clan[]
+  punishments Punishment[]
+  /// Друзі (Friendship.user)
+  friendships      Friendship[] @relation("UserFriendships")
+  friendRelations  Friendship[] @relation("FriendFriendships")
+  sentMessages     PrivateMessage[] @relation("SentMessages")
+  receivedMessages PrivateMessage[] @relation("ReceivedMessages")
+  collections      UserCollection[]
+
+  /// Admin logs actor and target relations
+  actionLogsAsActor AdminActionLog[] @relation("LogActor")
+  actionLogsAsTarget AdminActionLog[] @relation("LogTarget")
+
+  /// Reports reporter and target relations
+  reportsAsReporter Report[] @relation("ReportReporter")
+  reportsAsTarget   Report[] @relation("ReportTarget")
+}
+
+/// Ієрархія посад адміністрації (рівень 1–9)
+model StaffRole {
+  key       String   @id           // e.g. "TRAINEE", "HELPER", "MOD"...
+  title     String                 // UA display name ("Стажер", "Хелпер"...)
+  power     Int      @unique       // 1–9, higher = more access
+  color     String   @default("#aaaaaa") // hex color for nickname
+  users     User[]
+}
+
+/// Лог адміністративних дій
+model AdminActionLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  actor     User     @relation("LogActor", fields: [actorId], references: [id])
+  action    String
+  targetId  String?
+  target    User?    @relation("LogTarget", fields: [targetId], references: [id])
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+/// Скарги гравців
+model Report {
+  id            String   @id @default(uuid())
+  reporterId    String
+  reporter      User     @relation("ReportReporter", fields: [reporterId], references: [id])
+  targetId      String
+  target        User     @relation("ReportTarget", fields: [targetId], references: [id])
+  reason        String
+  screenshotUrl String?
+  status        String   @default("OPEN") // OPEN | IN_REVIEW | RESOLVED | REJECTED
+  resolvedBy    String?
+  resolvedNote  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Profile {
+  id        String @id @default(uuid())
+  userId    String @unique
+  avatarUrl String?
+  user      User   @relation(fields: [userId], references: [id])
+  mmr       Int    @default(1500)
+  matches   Int    @default(0)
+  wins      Int    @default(0)
+  losses    Int    @default(0)
+  xp        Int    @default(0)
+  level     Int    @default(1)
+  bannedUntil DateTime?
+  mutedUntil  DateTime?
+  activeFrame String?
+  unlockedFrames String[]
+  clanId      String?
+  clan        Clan?     @relation(fields: [clanId], references: [id])
+  clanRole    String    @default("MEMBER") // OWNER | OFFICER | MEMBER
+  clanContribution Int  @default(0)
+  achievements Achievement[]
+  matchHistory MatchParticipant[]
+  userQuests  UserQuest[]
+}
+
+/// Лог усіх покарань (ban/mute/kick) із тривалістю та областю дії
+model Punishment {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // BAN | MUTE | KICK
+  scope     String   // GLOBAL | ROOM:<id> | CHAT
+  reason    String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  createdBy String?  // id адміністратора / OWNER
+}
+
+model Clan {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id])
+  members   Profile[]
+  /// Агрегований рейтинг клану (для лідерборду кланів)
+  rating    Int       @default(0)
+}
+
+model Achievement {
+  id        String    @id @default(uuid())
+  profileId String
+  profile   Profile   @relation(fields: [profileId], references: [id])
+  type      String
+  unlockedAt DateTime @default(now())
+}
+
+model Match {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  winner    String
+  duration  Int
+  participants MatchParticipant[]
+}
+
+model MatchParticipant {
+  id        String    @id @default(uuid())
+  matchId   String
+  match     Match     @relation(fields: [matchId], references: [id])
+  profileId String
+  profile   Profile   @relation(fields: [profileId], references: [id])
+  role      String
+  won       Boolean
+}
+
+model Wallet {
+  id      String   @id @default(uuid())
+  userId  String   @unique
+  user    User     @relation(fields: [userId], references: [id])
+  soft    Int      @default(0)
+  hard    Int      @default(0)
+}
+
+/// Дружба між користувачами
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  user      User     @relation("UserFriendships", fields: [userId], references: [id])
+  friend    User     @relation("FriendFriendships", fields: [friendId], references: [id])
+  status    String   @default("pending") // pending | accepted | blocked
+  createdAt DateTime @default(now())
+}
+
+/// Приватні повідомлення між користувачами
+model PrivateMessage {
+  id        String   @id @default(uuid())
+  fromId    String
+  toId      String
+  from      User     @relation("SentMessages", fields: [fromId], references: [id])
+  to        User     @relation("ReceivedMessages", fields: [toId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+}
+
+/// Колекційні предмети (скіни, рамки, аватари тощо)
+model CollectionItem {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // skin | avatar | frame | other
+  rarity    String   @default("common")
+  roleKey   String?  // Для якої ролі/персонажа цей предмет (якщо потрібно)
+  createdAt DateTime @default(now())
+  owners    UserCollection[]
+}
+
+/// Звʼязок користувача з колекційними предметами
+model UserCollection {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  itemId    String
+  item      CollectionItem @relation(fields: [itemId], references: [id])
+  acquiredAt DateTime      @default(now())
+}
+
+/// Шаблони завдань (квестів)
+model Quest {
+  id            String      @id @default(uuid())
+  code          String      @unique // Ідентифікатор для логіки (напр. PLAY_3_MATCHES)
+  title         String
+  description   String
+  requirement   Int         // Яку кількість дій треба виконати (наприклад 5 перемог)
+  rewardSoft    Int         @default(0)
+  rewardHard    Int         @default(0)
+  createdAt     DateTime    @default(now())
+  userQuests    UserQuest[]
+}
+
+/// Прогрес конкретного користувача у виконанні квесту
+model UserQuest {
+  id          String    @id @default(uuid())
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id])
+  questId     String
+  quest       Quest     @relation(fields: [questId], references: [id])
+  progress    Int       @default(0)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
