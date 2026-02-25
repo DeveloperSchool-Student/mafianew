@@ -124,7 +124,7 @@ export function Lobby() {
             setGameState({ roomId: data.roomId });
         });
 
-        newSocket.on('online_queue_update', (data) => {
+        newSocket.on('online_queue_update', () => {
             // Could show queue count here if needed
         });
 
