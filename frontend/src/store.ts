@@ -64,7 +64,7 @@ interface AppState {
     fetchCurrentUser: () => Promise<void>;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
     user: null,
     isInitializing: true,
     socket: null,

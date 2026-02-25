@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Trophy, Hash, Star, Edit2 } from 'lucide-react';
+import { Trophy, Hash, Edit2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 

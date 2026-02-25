@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
-import { useTranslation } from 'react-i18next';
 
 export function BettingPanel() {
     const { gameState, socket } = useAppStore();
-    const { t } = useTranslation();
     const [betAmount, setBetAmount] = useState<number>(50);
     const [selectedFaction, setSelectedFaction] = useState<string>('МИРНІ');
 
