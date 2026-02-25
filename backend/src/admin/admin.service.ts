@@ -12,6 +12,14 @@ import {
   STAFF_ROLES,
 } from './admin.roles';
 
+// Prisma models that reference User — used for cascade delete
+const USER_RELATIONS = [
+  'punishments', 'sentMessages', 'receivedMessages',
+  'friendships', 'friendRelations', 'collections',
+  'actionLogsAsActor', 'actionLogsAsTarget',
+  'reportsAsReporter', 'reportsAsTarget',
+] as const;
+
 type PunishmentType = 'BAN' | 'MUTE' | 'KICK';
 
 @Injectable()
@@ -205,6 +213,14 @@ export class AdminService {
       include: { profile: true },
     });
     if (!target) throw new NotFoundException('Користувача не знайдено');
+
+    // Hierarchy check: cannot punish staff of equal or higher rank
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= power && power < 9) {
+      throw new ForbiddenException(
+        'Не можна карати адміна рівного або вищого за вас.',
+      );
+    }
 
     // Enforce max duration
     const maxSec = getMaxPunishSeconds(power);
@@ -493,5 +509,81 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+  }
+
+  /* ═══════════════════  MY REPORTS  ═══════════════════ */
+
+  async getMyReports(userId: string) {
+    return this.prisma.report.findMany({
+      where: { reporterId: userId },
+      include: {
+        target: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  /* ═══════════════════  DELETE USER  ═══════════════════ */
+
+  async deleteUser(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { targetUsername: string },
+  ) {
+    const actorPower = this.ensureMinPower(
+      requestUser,
+      PERMISSION.DELETE_USER,
+      'Видалення акаунту',
+    );
+
+    const target = await this.prisma.user.findUnique({
+      where: { username: params.targetUsername },
+    });
+    if (!target) throw new NotFoundException('Користувача не знайдено');
+
+    if (target.id === requestUser.id) {
+      throw new BadRequestException('Не можна видалити свій акаунт.');
+    }
+
+    const targetPower = getStaffPower(target.staffRoleKey);
+    if (targetPower >= actorPower && actorPower < 9) {
+      throw new ForbiddenException(
+        'Не можна видалити акаунт адміна рівного або вищого за вас.',
+      );
+    }
+
+    // Cascade delete: remove all related records first
+    const userId = target.id;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Delete quests
+      const profile = await tx.profile.findUnique({ where: { userId } });
+      if (profile) {
+        await tx.userQuest.deleteMany({ where: { profileId: profile.id } });
+        await tx.achievement.deleteMany({ where: { profileId: profile.id } });
+        await tx.matchParticipant.deleteMany({ where: { profileId: profile.id } });
+      }
+
+      await tx.punishment.deleteMany({ where: { userId } });
+      await tx.privateMessage.deleteMany({ where: { OR: [{ fromId: userId }, { toId: userId }] } });
+      await tx.friendship.deleteMany({ where: { OR: [{ userId }, { friendId: userId }] } });
+      await tx.userCollection.deleteMany({ where: { userId } });
+      await tx.adminActionLog.deleteMany({ where: { OR: [{ actorId: userId }, { targetId: userId }] } });
+      await tx.report.deleteMany({ where: { OR: [{ reporterId: userId }, { targetId: userId }] } });
+      await tx.wallet.deleteMany({ where: { userId } });
+      if (profile) {
+        await tx.profile.delete({ where: { userId } });
+      }
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    await this.logAction(
+      requestUser.id,
+      'DELETE_USER',
+      null,
+      `Видалено акаунт ${params.targetUsername} (ID: ${userId})`,
+    );
+
+    return { success: true };
   }
 }

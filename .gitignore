@@ -21,6 +21,9 @@ frontend/dist
 # Logs
 *.log
 
+# Task list (private)
+list.md
+
 # Agent/AI files
 .gemini
 .agents

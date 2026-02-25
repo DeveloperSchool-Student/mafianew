@@ -3,7 +3,8 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import axios from 'axios';
-import { ArrowLeft, Shield, Users, FileText, Activity, UserCog } from 'lucide-react';
+import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -34,6 +35,7 @@ type Tab = 'reports' | 'users' | 'staff' | 'logs';
 export function AdminPage() {
     const { user } = useAppStore();
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const [tab, setTab] = useState<Tab>('reports');
     const [actionTarget, setActionTarget] = useState('');
     const myPower = getMyPower(user?.staffRoleKey);
@@ -46,34 +48,48 @@ export function AdminPage() {
     if (!user || myPower === 0) return null;
 
     const tabs: { key: Tab; label: string; icon: any; minPower: number }[] = [
-        { key: 'reports', label: 'Скарги', icon: FileText, minPower: 1 },
-        { key: 'users', label: 'Користувачі', icon: Users, minPower: 3 },
-        { key: 'staff', label: 'Персонал', icon: UserCog, minPower: 8 },
-        { key: 'logs', label: 'Логи дій', icon: Activity, minPower: 7 },
+        { key: 'reports', label: t('admin.reports'), icon: FileText, minPower: 1 },
+        { key: 'users', label: t('admin.users'), icon: Users, minPower: 3 },
+        { key: 'staff', label: t('admin.staff'), icon: UserCog, minPower: 8 },
+        { key: 'logs', label: t('admin.logs'), icon: Activity, minPower: 7 },
     ];
 
     return (
         <div className="min-h-screen bg-mafia-dark text-mafia-light">
             {/* Header */}
-            <div className="bg-[#161616] border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="bg-[#161616] border-b border-gray-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-4">
                     <button onClick={() => navigate('/lobby')} className="text-gray-400 hover:text-white transition">
                         <ArrowLeft size={20} />
                     </button>
-                    <Shield size={24} className="text-mafia-red" />
-                    <h1 className="text-xl font-bold">Адмін-панель</h1>
+                    <Shield size={20} className="text-mafia-red sm:w-6 sm:h-6" />
+                    <h1 className="text-base sm:text-xl font-bold">{t('admin.title')}</h1>
                     {user.staffTitle && (
-                        <span className="text-sm px-2 py-0.5 rounded border" style={{ color: user.staffColor || '#aaa', borderColor: user.staffColor || '#aaa' }}>
+                        <span className="text-xs sm:text-sm px-2 py-0.5 rounded border hidden sm:inline" style={{ color: user.staffColor || '#aaa', borderColor: user.staffColor || '#aaa' }}>
                             {user.staffTitle}
                         </span>
                     )}
                 </div>
-                <span className="text-gray-500 text-sm">{user.username}</span>
+                <span className="text-gray-500 text-xs sm:text-sm">{user.username}</span>
+            </div>
+
+            {/* Mobile Tab Bar */}
+            <div className="md:hidden flex overflow-x-auto border-b border-gray-800 bg-[#111]">
+                {tabs.filter(t => myPower >= t.minPower).map(t => (
+                    <button
+                        key={t.key}
+                        onClick={() => setTab(t.key)}
+                        className={`flex items-center gap-2 px-4 py-3 text-xs font-medium whitespace-nowrap transition border-b-2 ${tab === t.key ? 'border-mafia-red text-white' : 'border-transparent text-gray-400'}`}
+                    >
+                        <t.icon size={14} />
+                        {t.label}
+                    </button>
+                ))}
             </div>
 
             <div className="flex">
-                {/* Sidebar */}
-                <nav className="w-56 bg-[#111] border-r border-gray-800 min-h-[calc(100vh-64px)] p-4 space-y-1">
+                {/* Desktop Sidebar */}
+                <nav className="hidden md:block w-56 bg-[#111] border-r border-gray-800 min-h-[calc(100vh-64px)] p-4 space-y-1">
                     {tabs.filter(t => myPower >= t.minPower).map(t => (
                         <button
                             key={t.key}
@@ -87,7 +103,7 @@ export function AdminPage() {
                 </nav>
 
                 {/* Content */}
-                <main className="flex-1 p-6">
+                <main className="flex-1 p-3 sm:p-6 overflow-x-hidden">
                     {tab === 'reports' && <ReportsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'users' && <UsersTab token={user.token} myPower={myPower} actionTarget={actionTarget} setActionTarget={setActionTarget} />}
                     {tab === 'staff' && <StaffTab token={user.token} myPower={myPower} />}
@@ -105,6 +121,7 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
     const [reports, setReports] = useState<any[]>([]);
     const [filter, setFilter] = useState('OPEN');
     const [loading, setLoading] = useState(false);
+    const { t } = useTranslation();
 
     const load = async () => {
         setLoading(true);
@@ -118,27 +135,27 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
     useEffect(() => { load(); }, [filter]);
 
     const resolve = async (id: string, status: 'RESOLVED' | 'REJECTED') => {
-        const note = prompt('Коментар (необовʼязково):');
+        const note = prompt(t('admin.comment_prompt'));
         try {
             await axios.post(`${API_URL}/admin/reports/${id}/resolve`, { status, note: note || undefined }, headers(token));
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
     const quickPunish = async (targetUsername: string, type: 'MUTE' | 'BAN', durationSeconds: number, reason: string) => {
-        if (!confirm(`Видати ${type} гравцю ${targetUsername} на ${durationSeconds}с за "${reason}"?`)) return;
+        if (!confirm(`${type} ${targetUsername} — ${durationSeconds}s — "${reason}"?`)) return;
         try {
             await axios.post(`${API_URL}/admin/punish`, {
                 targetUsername, type, durationSeconds, scope: 'GLOBAL', reason
             }, headers(token));
-            alert('✅ Покарання видано!');
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+            alert(t('admin.punishment_issued'));
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">📋 Скарги</h2>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold">📋 {t('admin.reports')}</h2>
                 <div className="flex gap-2">
                     {['OPEN', 'RESOLVED', 'REJECTED'].map(s => (
                         <button key={s} onClick={() => setFilter(s)}
@@ -148,38 +165,38 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
                 </div>
             </div>
 
-            {loading ? <p className="text-gray-500">Завантаження...</p> : reports.length === 0 ? <p className="text-gray-500">Немає скарг зі статусом {filter}</p> : (
+            {loading ? <p className="text-gray-500">{t('common.loading')}</p> : reports.length === 0 ? <p className="text-gray-500">{t('admin.no_reports', { status: filter })}</p> : (
                 <div className="space-y-3">
                     {reports.map(r => (
-                        <div key={r.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-4">
+                        <div key={r.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-3 sm:p-4">
                             <div className="flex justify-between items-start mb-2">
                                 <div>
                                     <p className="text-sm">
-                                        <b className="text-gray-300">Від:</b> <button onClick={() => r.reporter?.username && onUserAction(r.reporter.username)} className="text-yellow-400 hover:underline">{r.reporter?.username || r.reporterId}</button>
+                                        <b className="text-gray-300">{t('admin.from')}</b> <button onClick={() => r.reporter?.username && onUserAction(r.reporter.username)} className="text-yellow-400 hover:underline">{r.reporter?.username || r.reporterId}</button>
                                     </p>
                                     <p className="text-sm">
-                                        <b className="text-gray-300">На:</b> <button onClick={() => r.target?.username && onUserAction(r.target.username)} className="text-red-400 font-bold hover:underline">{r.target?.username || r.targetId}</button>
+                                        <b className="text-gray-300">{t('admin.to_target')}</b> <button onClick={() => r.target?.username && onUserAction(r.target.username)} className="text-red-400 font-bold hover:underline">{r.target?.username || r.targetId}</button>
                                     </p>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded ${r.status === 'OPEN' ? 'bg-yellow-900/50 text-yellow-300' : r.status === 'RESOLVED' ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
                                     {r.status}
                                 </span>
                             </div>
-                            <p className="text-gray-300 mb-2">{r.reason}</p>
+                            <p className="text-gray-300 mb-2 text-sm">{r.reason}</p>
                             {r.screenshotUrl && (
-                                <a href={r.screenshotUrl} target="_blank" rel="noreferrer" className="text-blue-400 text-sm hover:underline">📷 Скріншот</a>
+                                <a href={r.screenshotUrl} target="_blank" rel="noreferrer" className="text-blue-400 text-sm hover:underline">{t('admin.screenshot')}</a>
                             )}
-                            {r.resolvedNote && <p className="text-sm text-gray-500 mt-1">Відповідь: {r.resolvedNote}</p>}
+                            {r.resolvedNote && <p className="text-sm text-gray-500 mt-1">{t('admin.response')} {r.resolvedNote}</p>}
                             <p className="text-xs text-gray-600 mt-2">{new Date(r.createdAt).toLocaleString('uk-UA')}</p>
                             {r.status === 'OPEN' && myPower >= 2 && (
                                 <div className="flex flex-col gap-2 mt-3">
-                                    <div className="flex gap-2">
-                                        <button onClick={() => resolve(r.id, 'RESOLVED')} className="text-xs bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-3 py-1 rounded transition">✅ Вирішено</button>
-                                        <button onClick={() => resolve(r.id, 'REJECTED')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-3 py-1 rounded transition">❌ Відхилено</button>
+                                    <div className="flex gap-2 flex-wrap">
+                                        <button onClick={() => resolve(r.id, 'RESOLVED')} className="text-xs bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-3 py-1 rounded transition">{t('admin.resolve')}</button>
+                                        <button onClick={() => resolve(r.id, 'REJECTED')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-3 py-1 rounded transition">{t('admin.reject')}</button>
                                     </div>
                                     {myPower >= 3 && r.target?.username && (
-                                        <div className="flex gap-2">
-                                            <span className="text-xs text-gray-500 py-1">Швидка дія:</span>
+                                        <div className="flex gap-2 flex-wrap">
+                                            <span className="text-xs text-gray-500 py-1">{t('admin.quick_action')}</span>
                                             <button onClick={() => quickPunish(r.target.username, 'MUTE', 3600, 'Скарги: Порушення правил')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1h</button>
                                             <button onClick={() => quickPunish(r.target.username, 'MUTE', 86400, 'Скарги: Серйозне порушення')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1d</button>
                                             <button onClick={() => quickPunish(r.target.username, 'BAN', 86400, 'Скарги: Бан 1 день')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-2 py-1 rounded transition">Ban 1d</button>
@@ -210,13 +227,14 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
-    const [actionType, setActionType] = useState<'PUNISH' | 'GOLD' | 'EXP' | 'NICK'>('PUNISH');
+    const [actionType, setActionType] = useState<'PUNISH' | 'GOLD' | 'EXP' | 'NICK' | 'DELETE'>('PUNISH');
     const [templateIndex, setTemplateIndex] = useState(0);
     const [punishType, setPunishType] = useState<'KICK' | 'BAN' | 'MUTE'>('KICK');
     const [duration, setDuration] = useState(3600);
     const [reason, setReason] = useState('');
     const [delta, setDelta] = useState(100);
     const [newNick, setNewNick] = useState('');
+    const { t } = useTranslation();
 
     const load = async () => {
         setLoading(true);
@@ -246,38 +264,41 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                 await axios.post(`${API_URL}/admin/adjust-exp`, { targetUsername: actionTarget, delta }, headers(token));
             } else if (actionType === 'NICK') {
                 await axios.post(`${API_URL}/admin/change-nickname`, { targetUsername: actionTarget, newUsername: newNick }, headers(token));
+            } else if (actionType === 'DELETE') {
+                if (!confirm(t('admin.confirm_delete', { username: actionTarget }))) return;
+                await axios.post(`${API_URL}/admin/delete-user`, { targetUsername: actionTarget }, headers(token));
             }
-            alert('✅ Успішно!');
+            alert(`✅ ${t('common.success')}`);
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
     return (
         <div>
-            <h2 className="text-2xl font-bold mb-6">👥 Користувачі</h2>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6">👥 {t('admin.users')}</h2>
 
             {/* Search */}
             <input
                 type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Пошук за нікнеймом..."
-                className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white mb-4 focus:outline-none focus:border-gray-500"
+                placeholder={t('admin.search_nick')}
+                className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white mb-4 focus:outline-none focus:border-gray-500 text-sm"
             />
 
             {/* User table */}
-            <div className="overflow-x-auto mb-8">
-                <table className="w-full text-sm">
+            <div className="overflow-x-auto mb-8 -mx-3 sm:mx-0">
+                <table className="w-full text-xs sm:text-sm min-w-[500px]">
                     <thead>
                         <tr className="border-b border-gray-800 text-gray-500">
-                            <th className="text-left py-2 px-3">Нікнейм</th>
-                            <th className="text-left py-2 px-3">Роль</th>
-                            <th className="text-left py-2 px-3">Рівень</th>
-                            <th className="text-left py-2 px-3">MMR</th>
-                            <th className="text-left py-2 px-3">Баланс</th>
-                            <th className="text-left py-2 px-3">Стан</th>
+                            <th className="text-left py-2 px-2 sm:px-3">{t('admin.nickname')}</th>
+                            <th className="text-left py-2 px-2 sm:px-3">{t('admin.role')}</th>
+                            <th className="text-left py-2 px-2 sm:px-3">{t('admin.level')}</th>
+                            <th className="text-left py-2 px-2 sm:px-3 hidden sm:table-cell">MMR</th>
+                            <th className="text-left py-2 px-2 sm:px-3">{t('admin.balance')}</th>
+                            <th className="text-left py-2 px-2 sm:px-3">{t('admin.status')}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {loading ? <tr><td colSpan={6} className="py-4 text-center text-gray-500">Завантаження...</td></tr> :
+                        {loading ? <tr><td colSpan={6} className="py-4 text-center text-gray-500">{t('common.loading')}</td></tr> :
                             filtered.slice(0, 50).map(u => {
                                 const roleInfo = u.staffRole || STAFF_ROLES.find(r => r.key === u.staffRoleKey);
                                 return (
@@ -285,12 +306,12 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                                         onClick={() => setActionTarget(u.username)}
                                         className={`border-b border-gray-800/50 cursor-pointer transition hover:bg-[#1a1a1a] ${actionTarget === u.username ? 'bg-mafia-red/10' : ''}`}
                                     >
-                                        <td className="py-2 px-3 font-medium" style={{ color: roleInfo?.color || '#e0e0e0' }}>{u.username}</td>
-                                        <td className="py-2 px-3 text-gray-400">{roleInfo?.title || u.role || 'USER'}</td>
-                                        <td className="py-2 px-3 text-gray-400">{u.profile?.level ?? '—'}</td>
-                                        <td className="py-2 px-3 text-gray-400">{u.profile?.mmr ?? '—'}</td>
-                                        <td className="py-2 px-3 text-yellow-400">{u.wallet?.soft ?? 0} <CoinIcon size={14} /></td>
-                                        <td className="py-2 px-3">
+                                        <td className="py-2 px-2 sm:px-3 font-medium" style={{ color: roleInfo?.color || '#e0e0e0' }}>{u.username}</td>
+                                        <td className="py-2 px-2 sm:px-3 text-gray-400">{roleInfo?.title || u.role || 'USER'}</td>
+                                        <td className="py-2 px-2 sm:px-3 text-gray-400">{u.profile?.level ?? '—'}</td>
+                                        <td className="py-2 px-2 sm:px-3 text-gray-400 hidden sm:table-cell">{u.profile?.mmr ?? '—'}</td>
+                                        <td className="py-2 px-2 sm:px-3 text-yellow-400">{u.wallet?.soft ?? 0} <CoinIcon size={14} /></td>
+                                        <td className="py-2 px-2 sm:px-3">
                                             {u.profile?.bannedUntil && new Date(u.profile.bannedUntil) > new Date() ? <span className="text-red-400 text-xs">🚫 BAN</span> :
                                                 u.profile?.mutedUntil && new Date(u.profile.mutedUntil) > new Date() ? <span className="text-orange-400 text-xs">🔇 MUTE</span> :
                                                     <span className="text-green-400 text-xs">✅ OK</span>}
@@ -304,18 +325,21 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
 
             {/* Action Panel */}
             {actionTarget && (
-                <div className="bg-[#111] border border-gray-700 p-4 rounded-xl mb-6">
-                    <h3 className="font-bold mb-3 text-gray-200">Дії для: <span className="text-white">{actionTarget}</span></h3>
-                    <div className="flex gap-2 mb-4 text-xs">
+                <div className="bg-[#111] border border-gray-700 p-3 sm:p-4 rounded-xl mb-6">
+                    <h3 className="font-bold mb-3 text-gray-200">{t('admin.actions_for')} <span className="text-white">{actionTarget}</span></h3>
+                    <div className="flex gap-2 mb-4 text-xs flex-wrap">
                         {[
-                            { key: 'PUNISH' as const, label: 'Покарання', min: 3 },
-                            { key: 'GOLD' as const, label: 'Золото', min: 6 },
-                            { key: 'EXP' as const, label: 'Досвід', min: 6 },
-                            { key: 'NICK' as const, label: 'Нікнейм', min: 5 },
+                            { key: 'PUNISH' as const, label: t('admin.punishment'), min: 3 },
+                            { key: 'GOLD' as const, label: t('admin.gold'), min: 6 },
+                            { key: 'EXP' as const, label: t('admin.experience'), min: 6 },
+                            { key: 'NICK' as const, label: t('admin.nick_change'), min: 5 },
+                            { key: 'DELETE' as const, label: t('admin.delete_account'), min: 8 },
                         ].filter(a => myPower >= a.min).map(a => (
                             <button key={a.key} onClick={() => setActionType(a.key)}
-                                className={`px-3 py-1.5 border rounded transition ${actionType === a.key ? 'bg-mafia-red/30 border-mafia-red text-white' : 'border-gray-700 text-gray-400'}`}
-                            >{a.label}</button>
+                                className={`px-3 py-1.5 border rounded transition ${actionType === a.key
+                                    ? (a.key === 'DELETE' ? 'bg-red-900/50 border-red-500 text-red-300' : 'bg-mafia-red/30 border-mafia-red text-white')
+                                    : 'border-gray-700 text-gray-400'}`}
+                            >{a.key === 'DELETE' ? `🗑️ ${a.label}` : a.label}</button>
                         ))}
                     </div>
 
@@ -356,23 +380,34 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                                     <option value={604800}>7 днів</option>
                                     <option value={2592000}>30 днів</option>
                                 </select>
-                                <input type="text" placeholder="Причина" value={reason} onChange={e => { setReason(e.target.value); setTemplateIndex(0); }} className="col-span-2 bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm" />
+                                <input type="text" placeholder={t('admin.reason_placeholder')} value={reason} onChange={e => { setReason(e.target.value); setTemplateIndex(0); }} className="col-span-2 bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm" />
                             </div>
                         </div>
                     )}
 
+                    {actionType === 'DELETE' && (
+                        <div className="mb-3 bg-red-900/20 border border-red-700/50 rounded p-3">
+                            <p className="text-red-300 text-sm flex items-center gap-2">
+                                <Trash2 size={16} />
+                                {t('admin.confirm_delete', { username: actionTarget })}
+                            </p>
+                        </div>
+                    )}
+
+                    {(actionType === 'GOLD' || actionType === 'EXP') && (
+                        <input type="number" value={delta} onChange={e => setDelta(Number(e.target.value))} className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm mb-3" placeholder={t('admin.amount_placeholder')} />
+                    )}
+                    {actionType === 'NICK' && (
+                        <input type="text" value={newNick} onChange={e => setNewNick(e.target.value)} className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm mb-3" placeholder={t('admin.new_nick_placeholder')} />
+                    )}
+
+                    <button onClick={executeAction}
+                        className={`w-full font-bold py-2 rounded transition text-sm ${actionType === 'DELETE' ? 'bg-red-700 hover:bg-red-600 text-white' : 'bg-mafia-red hover:bg-red-700 text-white'}`}
+                    >
+                        {t('admin.apply')}
+                    </button>
                 </div>
             )}
-            {(actionType === 'GOLD' || actionType === 'EXP') && (
-                <input type="number" value={delta} onChange={e => setDelta(Number(e.target.value))} className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm mb-3" placeholder="Кількість (може бути відʼємною)" />
-            )}
-            {actionType === 'NICK' && (
-                <input type="text" value={newNick} onChange={e => setNewNick(e.target.value)} className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm mb-3" placeholder="Новий нікнейм" />
-            )}
-
-            <button onClick={executeAction} className="w-full bg-mafia-red hover:bg-red-700 text-white font-bold py-2 rounded transition">
-                Застосувати
-            </button>
         </div>
     );
 }
@@ -385,6 +420,7 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
     const [newStaffUsername, setNewStaffUsername] = useState('');
     const [newStaffRole, setNewStaffRole] = useState('TRAINEE');
     const [loading, setLoading] = useState(false);
+    const { t } = useTranslation();
 
     const load = async () => {
         setLoading(true);
@@ -401,30 +437,30 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
         if (!newStaffUsername) return;
         try {
             await axios.post(`${API_URL}/admin/staff/set-role`, { targetUsername: newStaffUsername, roleKey: newStaffRole }, headers(token));
-            alert('✅ Роль призначено!');
+            alert(t('admin.role_assigned'));
             setNewStaffUsername('');
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
     const removeRole = async (username: string) => {
-        if (!confirm(`Зняти роль з ${username}?`)) return;
+        if (!confirm(t('admin.confirm_remove_role', { username }))) return;
         try {
             await axios.post(`${API_URL}/admin/staff/remove-role`, { targetUsername: username }, headers(token));
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
     const availableRoles = STAFF_ROLES.filter(r => r.power < myPower || myPower >= 9);
 
     return (
         <div>
-            <h2 className="text-2xl font-bold mb-6">🛡️ Персонал</h2>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6">🛡️ {t('admin.staff')}</h2>
 
             {/* Existing staff */}
             <div className="space-y-2 mb-8">
-                {loading ? <p className="text-gray-500">Завантаження...</p> :
-                    staff.length === 0 ? <p className="text-gray-500">Немає адміністрації</p> :
+                {loading ? <p className="text-gray-500">{t('common.loading')}</p> :
+                    staff.length === 0 ? <p className="text-gray-500">{t('admin.no_staff')}</p> :
                         staff.map(s => {
                             const roleInfo = s.staffRole || STAFF_ROLES.find(r => r.key === s.staffRoleKey);
                             return (
@@ -435,12 +471,12 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
                                         </div>
                                         <div>
                                             <span className="font-medium" style={{ color: roleInfo?.color }}>{s.username}</span>
-                                            <p className="text-xs text-gray-500">{roleInfo?.title || s.staffRoleKey} • Останній вхід: {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString('uk-UA') : 'Невідомо'}</p>
+                                            <p className="text-xs text-gray-500">{roleInfo?.title || s.staffRoleKey} • {t('admin.last_login')} {s.lastLoginAt ? new Date(s.lastLoginAt).toLocaleString('uk-UA') : t('admin.unknown_login')}</p>
                                         </div>
                                     </div>
                                     {(roleInfo?.power || 0) < myPower && (
                                         <button onClick={() => removeRole(s.username)} className="text-xs bg-red-900/40 hover:bg-red-700 border border-red-700/50 text-red-300 px-2 py-1 rounded transition">
-                                            Зняти
+                                            {t('admin.remove_role')}
                                         </button>
                                     )}
                                 </div>
@@ -450,33 +486,33 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
 
             {/* Add new staff */}
             <div className="bg-[#111] border border-gray-700 rounded-xl p-4">
-                <h3 className="font-bold mb-3 text-gray-200">Призначити нового</h3>
-                <div className="grid grid-cols-3 gap-3">
+                <h3 className="font-bold mb-3 text-gray-200">{t('admin.assign_new')}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <input
                         type="text" value={newStaffUsername} onChange={e => setNewStaffUsername(e.target.value)}
-                        placeholder="Нікнейм гравця"
-                        className="col-span-1 bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm"
+                        placeholder={t('admin.player_nick')}
+                        className="bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm"
                     />
-                    <select value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)} className="col-span-1 bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm">
+                    <select value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)} className="bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm">
                         {availableRoles.map(r => (
                             <option key={r.key} value={r.key} style={{ color: r.color }}>{r.title} (lv.{r.power})</option>
                         ))}
                     </select>
                     <button onClick={assignRole} className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 rounded transition text-sm">
-                        Призначити
+                        {t('admin.assign')}
                     </button>
                 </div>
             </div>
 
             {/* Role Legend */}
             <div className="mt-8">
-                <h3 className="text-sm font-bold text-gray-500 mb-3 uppercase tracking-wider">Ієрархія посад</h3>
-                <div className="grid grid-cols-3 gap-2">
+                <h3 className="text-sm font-bold text-gray-500 mb-3 uppercase tracking-wider">{t('admin.hierarchy')}</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {STAFF_ROLES.map(r => (
                         <div key={r.key} className="flex items-center gap-2 px-3 py-2 rounded bg-[#1a1a1a] border border-gray-800">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color }}></div>
-                            <span className="text-sm" style={{ color: r.color }}>{r.title}</span>
-                            <span className="text-xs text-gray-600 ml-auto">Lv.{r.power}</span>
+                            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }}></div>
+                            <span className="text-xs sm:text-sm truncate" style={{ color: r.color }}>{r.title}</span>
+                            <span className="text-xs text-gray-600 ml-auto flex-shrink-0">Lv.{r.power}</span>
                         </div>
                     ))}
                 </div>
@@ -491,6 +527,7 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
 function LogsTab({ token, onUserAction }: { token: string; onUserAction: (username: string) => void }) {
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const { t } = useTranslation();
 
     useEffect(() => {
         (async () => {
@@ -505,16 +542,16 @@ function LogsTab({ token, onUserAction }: { token: string; onUserAction: (userna
 
     return (
         <div>
-            <h2 className="text-2xl font-bold mb-6">📜 Логи адмін-дій</h2>
-            {loading ? <p className="text-gray-500">Завантаження...</p> : logs.length === 0 ? <p className="text-gray-500">Немає записів</p> : (
+            <h2 className="text-xl sm:text-2xl font-bold mb-6">📜 {t('admin.logs')}</h2>
+            {loading ? <p className="text-gray-500">{t('common.loading')}</p> : logs.length === 0 ? <p className="text-gray-500">{t('admin.no_logs')}</p> : (
                 <div className="space-y-2">
                     {logs.map(l => (
-                        <div key={l.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-3 flex items-start justify-between">
+                        <div key={l.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-3 flex flex-col sm:flex-row items-start justify-between gap-2">
                             <div>
                                 <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300 font-mono">{l.action}</span>
                                 <p className="text-sm text-gray-400 mt-1">
-                                    Адмін: <button onClick={() => l.actor?.username && onUserAction(l.actor.username)} className="text-gray-200 hover:underline">{l.actor?.username || l.actorId}</button>
-                                    {l.targetId && <> → Ціль: <button onClick={() => l.target?.username && onUserAction(l.target.username)} className="text-yellow-400 hover:underline">{l.target?.username || l.targetId}</button></>}
+                                    {t('admin.admin_action')} <button onClick={() => l.actor?.username && onUserAction(l.actor.username)} className="text-gray-200 hover:underline">{l.actor?.username || l.actorId}</button>
+                                    {l.targetId && <> → {t('admin.target')} <button onClick={() => l.target?.username && onUserAction(l.target.username)} className="text-yellow-400 hover:underline">{l.target?.username || l.targetId}</button></>}
                                 </p>
                                 {l.details && <p className="text-xs text-gray-500 mt-1">{l.details}</p>}
                             </div>

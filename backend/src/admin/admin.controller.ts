@@ -114,6 +114,11 @@ export class AdminController {
     return this.adminService.createReport(req.user.sub, body);
   }
 
+  @Get('my-reports')
+  getMyReports(@Request() req: any) {
+    return this.adminService.getMyReports(req.user.sub);
+  }
+
   @Get('reports')
   listReports(@Request() req: any, @Query('status') status?: string) {
     return this.adminService.listReports(req.user, status);
@@ -144,5 +149,15 @@ export class AdminController {
   seedRoles(@Request() req: any) {
     // Only owner-level power can seed
     return this.adminService.seedStaffRoles();
+  }
+
+  /* ── Delete User ── */
+
+  @Post('delete-user')
+  deleteUser(
+    @Request() req: any,
+    @Body() body: { targetUsername: string },
+  ) {
+    return this.adminService.deleteUser(req.user, body);
   }
 }

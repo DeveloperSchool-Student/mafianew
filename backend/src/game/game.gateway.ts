@@ -516,4 +516,59 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+
+  /* ═══════════════════  ONLINE MATCHMAKING  ═══════════════════ */
+
+  private onlineQueue: Map<string, { userId: string; username: string; socketId: string }> = new Map();
+  private readonly MIN_PLAYERS_ONLINE = 6;
+
+  @SubscribeMessage('join_online_queue')
+  async handleJoinOnlineQueue(@ConnectedSocket() client: Socket) {
+    const userId = client.data?.user?.sub;
+    const username = client.data?.user?.username;
+    if (!userId || !username) return;
+
+    // Add to queue
+    this.onlineQueue.set(userId, { userId, username, socketId: client.id });
+    client.emit('online_queue_update', { inQueue: this.onlineQueue.size });
+
+    // Try to match
+    if (this.onlineQueue.size >= this.MIN_PLAYERS_ONLINE) {
+      const players = Array.from(this.onlineQueue.values()).slice(0, this.MIN_PLAYERS_ONLINE);
+
+      // Create room with the first player as host
+      const host = players[0];
+      const roomId = await this.gameService.createRoom(host.userId, host.username);
+
+      // Join all other players
+      for (let i = 1; i < players.length; i++) {
+        await this.gameService.joinRoom(roomId, players[i].userId, players[i].username);
+      }
+
+      // Remove from queue and notify
+      for (const p of players) {
+        this.onlineQueue.delete(p.userId);
+        const sock = this.server.sockets.sockets.get(p.socketId);
+        if (sock) {
+          sock.join(roomId);
+          sock.emit('online_match_found', { roomId });
+        }
+      }
+
+      // Broadcast room update
+      const room = await this.gameService.getRoom(roomId);
+      if (room) {
+        this.server.to(roomId).emit('room_updated', room);
+      }
+    }
+  }
+
+  @SubscribeMessage('leave_online_queue')
+  handleLeaveOnlineQueue(@ConnectedSocket() client: Socket) {
+    const userId = client.data?.user?.sub;
+    if (userId) {
+      this.onlineQueue.delete(userId);
+      client.emit('online_queue_update', { inQueue: this.onlineQueue.size, left: true });
+    }
+  }
 }

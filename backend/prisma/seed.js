@@ -23,6 +23,19 @@ async function main() {
         console.log(`✅ ${r.key} (${r.title})`);
     }
     console.log('\nAll staff roles seeded!');
+
+    // Task 8: Assign user "ADMIN" as OWNER
+    const adminUser = await prisma.user.findUnique({ where: { username: 'ADMIN' } });
+    if (adminUser) {
+        await prisma.user.update({
+            where: { id: adminUser.id },
+            data: { staffRoleKey: 'OWNER', role: 'OWNER' },
+        });
+        console.log('✅ User "ADMIN" assigned as OWNER (Власник)');
+    } else {
+        console.log('⚠️ User "ADMIN" not found — skipping OWNER assignment');
+    }
+
     await prisma.$disconnect();
 }
 
