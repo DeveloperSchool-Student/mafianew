@@ -3,8 +3,9 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import axios from 'axios';
-import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2 } from 'lucide-react';
+import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { TITLES } from '../constants/titles';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -30,7 +31,7 @@ function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-type Tab = 'reports' | 'users' | 'staff' | 'logs' | 'duties';
+type Tab = 'reports' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders';
 
 export function AdminPage() {
     const { user } = useAppStore();
@@ -51,6 +52,7 @@ export function AdminPage() {
         { key: 'reports', label: t('admin.reports'), icon: FileText, minPower: 1 },
         { key: 'users', label: t('admin.users'), icon: Users, minPower: 3 },
         { key: 'staff', label: t('admin.staff'), icon: UserCog, minPower: 8 },
+        { key: 'leaders', label: 'Лідери', icon: Award, minPower: 8 },
         { key: 'logs', label: t('admin.logs'), icon: Activity, minPower: 7 },
         { key: 'duties', label: 'Обов\'язки', icon: FileText, minPower: 1 },
     ];
@@ -108,6 +110,7 @@ export function AdminPage() {
                     {tab === 'reports' && <ReportsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'users' && <UsersTab token={user.token} myPower={myPower} actionTarget={actionTarget} setActionTarget={setActionTarget} />}
                     {tab === 'staff' && <StaffTab token={user.token} myPower={myPower} />}
+                    {tab === 'leaders' && <LeadersTab token={user.token} />}
                     {tab === 'logs' && <LogsTab token={user.token} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'duties' && <DutiesTab />}
                 </main>
@@ -605,6 +608,95 @@ function DutiesTab() {
                     <p className="font-bold text-white mb-1">Увага!</p>
                     <p>Кожна ваша дія логується та може бути перевірена Старшою адміністрацією або Власником.</p>
                     <p>Перевищення повноважень або порушення цих правил карається <b>попередженням</b>, <b>пониженням рангу</b> або <b>повним зняттям повноважень</b> з можливим блокуванням акаунту.</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LEADERS (TITLES) TAB
+   ═══════════════════════════════════════════════════════════ */
+function LeadersTab({ token }: { token: string }) {
+    const [targetUsername, setTargetUsername] = useState('');
+    const [selectedTitle, setSelectedTitle] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const { t } = useTranslation();
+
+    const assignTitle = async () => {
+        if (!targetUsername) return;
+        try {
+            await axios.post(`${API_URL}/admin/set-title`, {
+                targetUsername,
+                title: selectedTitle || null // Empty string means remove title
+            }, headers(token));
+            alert('Титул успішно оновлено!');
+            setTargetUsername('');
+            setSelectedTitle('');
+            setSearchTerm('');
+        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+    };
+
+    const filteredTitles = TITLES.filter(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6 text-yellow-500">🏆 Лідери (Титули)</h2>
+
+            <div className="bg-[#111] border border-gray-700 rounded-xl p-4 md:p-6 max-w-2xl">
+                <p className="text-sm text-gray-400 mb-6">Видача спеціальних титулів гравцям. Титул відображатиметься в профілі гравця золотим кольором. Залиште поле титулу пустим, щоб зняти поточний титул з гравця.</p>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">Нікнейм гравця</label>
+                        <input
+                            type="text" value={targetUsername} onChange={e => setTargetUsername(e.target.value)}
+                            placeholder="Введіть нікнейм"
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-yellow-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">Вибір Титулу</label>
+                        <input
+                            type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="Пошук титулу..."
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white mb-2 text-sm focus:outline-none focus:border-yellow-500"
+                        />
+                        <div className="bg-[#1a1a1a] border border-gray-700 rounded max-h-60 overflow-y-auto">
+                            <div
+                                onClick={() => setSelectedTitle('')}
+                                className={`p-2 cursor-pointer text-sm border-b border-gray-800 transition ${selectedTitle === '' ? 'bg-mafia-red/20 text-white' : 'text-gray-400 hover:bg-gray-800'}`}
+                            >
+                                [🚫 Зняти титул]
+                            </div>
+                            {filteredTitles.map(t => (
+                                <div
+                                    key={t}
+                                    onClick={() => setSelectedTitle(t)}
+                                    className={`p-2 cursor-pointer text-sm font-medium border-b border-gray-800 transition ${selectedTitle === t ? 'bg-yellow-500/20 text-yellow-400' : 'text-gray-300 hover:bg-gray-800'}`}
+                                >
+                                    {t}
+                                </div>
+                            ))}
+                            {filteredTitles.length === 0 && <div className="p-3 text-sm text-gray-500 text-center">Нічого не знайдено</div>}
+                        </div>
+                    </div>
+
+                    {selectedTitle && (
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                            <p className="text-sm text-gray-400 mb-1">Попередній перегляд (у профілі):</p>
+                            <p className="text-yellow-500 font-bold tracking-wide" style={{ textShadow: '0 0 5px rgba(234, 179, 8, 0.4)' }}>«{selectedTitle}»</p>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={assignTitle}
+                        disabled={!targetUsername}
+                        className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold py-3 rounded transition mt-4"
+                    >
+                        {selectedTitle ? 'Видати Титул' : 'Зняти Титул'}
+                    </button>
                 </div>
             </div>
         </div>

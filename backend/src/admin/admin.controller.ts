@@ -160,4 +160,15 @@ export class AdminController {
   ) {
     return this.adminService.deleteUser(req.user, body);
   }
+
+  /* ── Titles (Leaders) ── */
+
+  @Post('set-title')
+  setPlayerTitle(
+    @Request() req: any,
+    @Body() body: { targetUsername: string; title: string | null },
+  ) {
+    // Controller just passes to service, service handles auth/logic
+    return this.adminService.setPlayerTitle(req.user, body);
+  }
 }

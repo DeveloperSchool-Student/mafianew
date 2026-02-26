@@ -47,6 +47,7 @@ export const PERMISSION = {
     VIEW_APPEALS: 7,  // Старший Адміністратор+
     VIEW_LOGS: 7,  // Старший Адміністратор+
     MANAGE_STAFF: 8,  // Куратор+
+    SET_TITLE: 8,     // Куратор+ (Видача титулів "Лідери")
     DELETE_USER: 8,  // Куратор+ (повне видалення акаунту)
     CONFIG: 9,  // Тільки Власник
 } as const;

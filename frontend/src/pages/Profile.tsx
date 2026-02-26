@@ -15,7 +15,7 @@ interface UserProfile {
     staffRoleKey?: string | null;
     staffRole?: { title: string; color: string; } | null;
     profile?: {
-        mmr: number; matches: number; wins: number; losses: number; avatarUrl?: string; xp?: number; level?: number; activeFrame?: string;
+        mmr: number; matches: number; wins: number; losses: number; avatarUrl?: string; xp?: number; level?: number; activeFrame?: string; title?: string | null;
         matchHistory?: {
             id: string; role: string; won: boolean;
             match: { id: string; winner: string; duration: number; createdAt: string; }
@@ -121,6 +121,11 @@ export function Profile() {
                                     </span>
                                 )}
                             </div>
+                            {profile.profile?.title && (
+                                <p className="text-yellow-500 font-bold mb-1 text-sm sm:text-base tracking-wide" style={{ textShadow: '0 0 5px rgba(234, 179, 8, 0.4)' }}>
+                                    «{profile.profile.title}»
+                                </p>
+                            )}
                             <p className="text-gray-500 text-xs sm:text-sm flex items-center gap-2">
                                 <Hash size={14} /> ID: {profile.id.split('-')[0]}...
                             </p>

@@ -610,4 +610,42 @@ export class AdminService {
 
     return { success: true };
   }
+
+  /* ═══════════════════  TITLES (LEADERS)  ═══════════════════ */
+
+  async setPlayerTitle(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { targetUsername: string; title: string | null },
+  ) {
+    this.ensureMinPower(
+      requestUser,
+      PERMISSION.SET_TITLE,
+      'Видача титулу',
+    );
+
+    const target = await this.prisma.user.findUnique({
+      where: { username: params.targetUsername },
+      include: { profile: true },
+    });
+
+    if (!target) throw new NotFoundException('Користувача не знайдено');
+    if (!target.profile) throw new NotFoundException('Профіль не знайдено');
+
+    // Update the player's title in their profile
+    await this.prisma.profile.update({
+      where: { id: target.profile.id },
+      data: { title: params.title },
+    });
+
+    // Log the action
+    const displayTitle = params.title ? `«${params.title}»` : 'Знято';
+    await this.logAction(
+      requestUser.id,
+      'SET_TITLE',
+      target.id,
+      `Встановлено титул: ${displayTitle}`,
+    );
+
+    return { success: true };
+  }
 }

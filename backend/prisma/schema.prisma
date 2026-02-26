@@ -79,6 +79,7 @@ model Profile {
   id        String @id @default(uuid())
   userId    String @unique
   avatarUrl String?
+  title     String?
   user      User   @relation(fields: [userId], references: [id])
   mmr       Int    @default(1500)
   matches   Int    @default(0)

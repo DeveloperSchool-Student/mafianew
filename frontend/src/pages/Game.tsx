@@ -75,6 +75,9 @@ export function Game() {
             return;
         }
 
+        // Emit check_active_game on mount to catch state updates missed during navigation
+        socket.emit('check_active_game');
+
         const handleStateUpdate = (newGameState: any) => {
             const oldState = useAppStore.getState().gameState;
             if (oldState.phase && newGameState.phase && oldState.phase !== newGameState.phase) {
