@@ -5,6 +5,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { GameGateway } from '../game/game.gateway';
 import {
   getStaffPower,
   getMaxPunishSeconds,
@@ -24,7 +26,11 @@ type PunishmentType = 'BAN' | 'MUTE' | 'KICK';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redisService: RedisService,
+    private readonly gameGateway: GameGateway,
+  ) { }
 
   /* ─── helpers ─── */
 
@@ -518,6 +524,13 @@ export class AdminService {
       `Report ${params.reportId} → ${params.status}: ${params.note || '—'}`,
     );
 
+    // Emit notification to reporter
+    this.gameGateway.server.to(report.reporterId).emit('notification', {
+      type: params.status === 'RESOLVED' ? 'success' : 'info',
+      title: 'Скаргу розглянуто',
+      message: `Ваша скарга на користувача була розглянута адміністратором. Статус: ${params.status}.`
+    });
+
     return { success: true };
   }
 
@@ -611,6 +624,42 @@ export class AdminService {
     return { success: true };
   }
 
+  /* ═══════════════════  ACTIVE ROOMS  ═══════════════════ */
+
+  async getActiveRooms(requestUser: { id: string; staffRoleKey?: string | null }) {
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_LOGS, 'Перегляд кімнат');
+    const redis = this.redisService.getClient();
+    const keys = await redis.keys('room:*');
+    const rooms = [];
+    for (const key of keys) {
+      const data = await redis.get(key);
+      if (data) {
+        try {
+          const room = JSON.parse(data);
+          let phase = 'WAITING';
+          let dayCount = 0;
+          if (room.status === 'IN_PROGRESS') {
+            const stateData = await redis.get(`state:${room.id}`);
+            if (stateData) {
+              const state = JSON.parse(stateData);
+              phase = state.phase || 'IN_PROGRESS';
+              dayCount = state.dayCount || 0;
+            }
+          }
+          rooms.push({
+            id: room.id,
+            status: room.status,
+            playersCount: Array.isArray(room.players) ? room.players.length : 0,
+            hostId: room.hostId,
+            phase,
+            dayCount,
+          });
+        } catch { }
+      }
+    }
+    return rooms;
+  }
+
   /* ═══════════════════  TITLES (LEADERS)  ═══════════════════ */
 
   async setPlayerTitle(
@@ -644,6 +693,243 @@ export class AdminService {
       'SET_TITLE',
       target.id,
       `Встановлено титул: ${displayTitle}`,
+    );
+
+    return { success: true };
+  }
+
+  /* ═══════════════════  APPEALS  ═══════════════════ */
+
+  async submitAppeal(
+    userId: string,
+    params: { type: 'UNBAN' | 'UNMUTE'; reason: string },
+  ) {
+    if (!params.reason || params.reason.trim().length < 10) {
+      throw new BadRequestException('Причина має бути детальною (мінімум 10 символів).');
+    }
+
+    // Check if there is already a pending appeal for this user
+    const existing = await this.prisma.appeal.findFirst({
+      where: { userId, status: 'PENDING' },
+    });
+
+    if (existing) {
+      throw new BadRequestException('У вас вже є нерозглянута апеляція.');
+    }
+
+    return this.prisma.appeal.create({
+      data: {
+        userId,
+        type: params.type,
+        reason: params.reason,
+      },
+    });
+  }
+
+  async listAppeals(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    status?: string,
+  ) {
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_REPORTS, 'Перегляд апеляцій');
+    return this.prisma.appeal.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        user: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async resolveAppeal(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { appealId: string; status: 'APPROVED' | 'REJECTED' },
+  ) {
+    this.ensureMinPower(requestUser, PERMISSION.RESOLVE_REPORTS, 'Розгляд апеляції');
+
+    const appeal = await this.prisma.appeal.findUnique({
+      where: { id: params.appealId },
+      include: { user: true },
+    });
+
+    if (!appeal) throw new NotFoundException('Апеляцію не знайдено');
+    if (appeal.status !== 'PENDING') {
+      throw new BadRequestException('Ця апеляція вже розглянута.');
+    }
+
+    await this.prisma.appeal.update({
+      where: { id: params.appealId },
+      data: {
+        status: params.status,
+        resolvedBy: requestUser.id,
+      },
+    });
+
+    // If approved, lift the punishment immediately
+    if (params.status === 'APPROVED') {
+      if (appeal.type === 'UNBAN') {
+        await this.prisma.profile.update({
+          where: { userId: appeal.userId },
+          data: { bannedUntil: null },
+        });
+        await this.prisma.punishment.updateMany({
+          where: { userId: appeal.userId, type: 'BAN', expiresAt: null },
+          data: { expiresAt: new Date() },
+        });
+      } else if (appeal.type === 'UNMUTE') {
+        await this.prisma.profile.update({
+          where: { userId: appeal.userId },
+          data: { mutedUntil: null },
+        });
+        await this.prisma.punishment.updateMany({
+          where: { userId: appeal.userId, type: 'MUTE', expiresAt: null },
+          data: { expiresAt: new Date() },
+        });
+      }
+    }
+
+    await this.logAction(
+      requestUser.id,
+      'RESOLVE_APPEAL',
+      appeal.userId,
+      `Appeal ${params.appealId} (${appeal.type}) → ${params.status}`,
+    );
+
+    // Emit notification to user
+    const actionText = appeal.type === 'UNBAN' ? 'Блокування' : 'Мут';
+    const statusText = params.status === 'APPROVED' ? 'СХВАЛЕНО' : 'ВІДХИЛЕНО';
+
+    this.gameGateway.server.to(appeal.userId).emit('notification', {
+      type: params.status === 'APPROVED' ? 'success' : 'error',
+      title: 'Апеляцію розглянуто',
+      message: `Ваша апеляція на ${actionText} була розглянута. Статус: ${statusText}.`
+    });
+
+    return { success: true };
+  }
+
+  /* ═══════════════════  EVENTS  ═══════════════════ */
+
+  async launchEvent(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { eventName: string; rewardCoins?: number },
+  ) {
+    const power = this.ensureMinPower(requestUser, 9, 'Запуск Івенту'); // Only owner
+
+    if (!params.eventName || params.eventName.trim().length < 3) {
+      throw new BadRequestException('Назва івенту занадто коротка');
+    }
+
+    // 1. Give reward to all currently online users (or all users in DB)? 
+    // Usually Events give rewards to those who login or are online. We'll simply give to ALL users for this feature.
+    let targetCount = 0;
+    if (params.rewardCoins && params.rewardCoins > 0) {
+      const result = await this.prisma.wallet.updateMany({
+        data: { soft: { increment: params.rewardCoins } },
+      });
+      targetCount = result.count;
+    }
+
+    // 2. Broadcast global notification
+    this.gameGateway.server.emit('notification', {
+      type: 'success',
+      title: '🌟 ГЛОБАЛЬНИЙ ІВЕНТ!',
+      message: `Стартував івент «${params.eventName}»! ${params.rewardCoins ? `Усі гравці отримали ${params.rewardCoins} монет!` : ''}`,
+      duration: 10000
+    });
+
+    await this.logAction(
+      requestUser.id,
+      'LAUNCH_EVENT',
+      null,
+      `Launched event: ${params.eventName} with ${params.rewardCoins || 0} coins to ${targetCount} users`,
+    );
+
+    return {
+      success: true,
+      message: 'Івент успішно запущено.',
+      rewardedUsers: targetCount
+    };
+  }
+
+  /* ═══════════════════  CLAN WARS  ═══════════════════ */
+
+  async listClanWars(requestUser: { id: string; staffRoleKey?: string | null }, status?: string) {
+    this.ensureMinPower(requestUser, 4, 'Перегляд Війн Кланів');
+    return this.prisma.clanWar.findMany({
+      where: status ? { status } : undefined,
+      include: {
+        challenger: { select: { id: true, name: true, rating: true } },
+        target: { select: { id: true, name: true, rating: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async resolveClanWar(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { warId: string; winnerId: string | null },
+  ) {
+    this.ensureMinPower(requestUser, 4, 'Вирішення Війн Кланів');
+
+    const war = await this.prisma.clanWar.findUnique({
+      where: { id: params.warId },
+    });
+
+    if (!war) throw new NotFoundException('Війну не знайдено');
+    if (war.status !== 'ACTIVE') {
+      throw new BadRequestException('Ця війна не є активною (або вже завершена).');
+    }
+
+    const bet = war.customBet > 0 ? war.customBet : 25; // default rating change
+
+    if (params.winnerId) {
+      if (params.winnerId !== war.challengerId && params.winnerId !== war.targetId) {
+        throw new BadRequestException('Переможець має бути одним із кланів у війні.');
+      }
+      const loserId = params.winnerId === war.challengerId ? war.targetId : war.challengerId;
+
+      const winnerClan = await this.prisma.clan.findUnique({ where: { id: params.winnerId } });
+      const loserClan = await this.prisma.clan.findUnique({ where: { id: loserId } });
+
+      await this.prisma.$transaction([
+        this.prisma.clan.update({
+          where: { id: params.winnerId },
+          data: { rating: (winnerClan?.rating || 0) + bet },
+        }),
+        this.prisma.clan.update({
+          where: { id: loserId },
+          data: { rating: Math.max(0, (loserClan?.rating || 0) - bet) },
+        }),
+        this.prisma.clanWar.update({
+          where: { id: params.warId },
+          data: {
+            status: 'FINISHED',
+            winnerId: params.winnerId,
+            ratingChange: bet,
+            endedAt: new Date(),
+          },
+        }),
+      ]);
+    } else {
+      // Draw
+      await this.prisma.clanWar.update({
+        where: { id: params.warId },
+        data: {
+          status: 'FINISHED',
+          winnerId: null,
+          ratingChange: 0,
+          endedAt: new Date(),
+        },
+      });
+    }
+
+    await this.logAction(
+      requestUser.id,
+      'RESOLVE_CLAN_WAR',
+      null,
+      `ClanWar ${params.warId} resolved. WinnerId: ${params.winnerId || 'DRAW'}`,
     );
 
     return { success: true };

@@ -409,10 +409,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (!state) {
       // Lobby Chat
-      this.server.to(data.roomId).emit('chat_message', {
+      this.server.emit('global_chat_message', {
+        id: Date.now().toString() + Math.random().toString().substring(2, 6),
         sender: username,
         text: data.message,
-        type: 'lobby',
+        timestamp: new Date().toISOString(),
       });
       return;
     }
@@ -518,9 +519,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /* ═══════════════════  ONLINE MATCHMAKING  ═══════════════════ */
-
   private onlineQueue: Map<string, { userId: string; username: string; socketId: string }> = new Map();
-  private readonly MIN_PLAYERS_ONLINE = 6;
+  private readonly MIN_PLAYERS_ONLINE = 5;
+  private readonly MAX_PLAYERS_ONLINE = 20;
+  private onlineMatchTimer: NodeJS.Timeout | null = null;
+  private matchTimerCountdown = 0;
 
   @SubscribeMessage('join_online_queue')
   async handleJoinOnlineQueue(@ConnectedSocket() client: Socket) {
@@ -530,35 +533,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // Add to queue
     this.onlineQueue.set(userId, { userId, username, socketId: client.id });
-    client.emit('online_queue_update', { inQueue: this.onlineQueue.size });
 
-    // Try to match
+    this.broadcastQueueUpdate();
+
+    // Check if we reached the required minimum
     if (this.onlineQueue.size >= this.MIN_PLAYERS_ONLINE) {
-      const players = Array.from(this.onlineQueue.values()).slice(0, this.MIN_PLAYERS_ONLINE);
-
-      // Create room with the first player as host
-      const host = players[0];
-      const roomId = await this.gameService.createRoom(host.userId, host.username);
-
-      // Join all other players
-      for (let i = 1; i < players.length; i++) {
-        await this.gameService.joinRoom(roomId, players[i].userId, players[i].username);
+      if (!this.onlineMatchTimer) {
+        this.startOnlineMatchTimer();
       }
 
-      // Remove from queue and notify
-      for (const p of players) {
-        this.onlineQueue.delete(p.userId);
-        const sock = this.server.sockets.sockets.get(p.socketId);
-        if (sock) {
-          sock.join(roomId);
-          sock.emit('online_match_found', { roomId });
+      // If we miraculously hit max players right away, force start
+      if (this.onlineQueue.size >= this.MAX_PLAYERS_ONLINE) {
+        if (this.onlineMatchTimer) {
+          clearInterval(this.onlineMatchTimer);
+          this.onlineMatchTimer = null;
         }
-      }
-
-      // Broadcast room update
-      const room = await this.gameService.getRoom(roomId);
-      if (room) {
-        this.server.to(roomId).emit('room_updated', room);
+        await this.startOnlineMatch();
       }
     }
   }
@@ -568,7 +558,89 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.data?.user?.sub;
     if (userId) {
       this.onlineQueue.delete(userId);
+
+      // If we dip below minimum players, stop the timer
+      if (this.onlineQueue.size < this.MIN_PLAYERS_ONLINE && this.onlineMatchTimer) {
+        clearInterval(this.onlineMatchTimer);
+        this.onlineMatchTimer = null;
+        this.matchTimerCountdown = 0;
+      }
+
+      this.broadcastQueueUpdate();
       client.emit('online_queue_update', { inQueue: this.onlineQueue.size, left: true });
+    }
+  }
+
+  private startOnlineMatchTimer() {
+    this.matchTimerCountdown = 15; // 15 seconds timer
+    this.broadcastQueueUpdate();
+
+    this.onlineMatchTimer = setInterval(async () => {
+      this.matchTimerCountdown--;
+      this.broadcastQueueUpdate();
+
+      if (this.matchTimerCountdown <= 0) {
+        clearInterval(this.onlineMatchTimer!);
+        this.onlineMatchTimer = null;
+
+        // Final sanity check
+        if (this.onlineQueue.size >= this.MIN_PLAYERS_ONLINE) {
+          await this.startOnlineMatch();
+        }
+      }
+    }, 1000);
+  }
+
+  private async startOnlineMatch() {
+    const players = Array.from(this.onlineQueue.values()).slice(0, this.MAX_PLAYERS_ONLINE);
+
+    // Create room with the first player as host
+    const host = players[0];
+    const roomId = await this.gameService.createRoom(host.userId, host.username);
+
+    // Join all other players
+    for (let i = 1; i < players.length; i++) {
+      await this.gameService.joinRoom(roomId, players[i].userId, players[i].username);
+    }
+
+    // Remove from queue and notify
+    for (const p of players) {
+      this.onlineQueue.delete(p.userId);
+      const sock = this.server.sockets.sockets.get(p.socketId);
+      if (sock) {
+        sock.join(roomId);
+        sock.emit('online_match_found', { roomId });
+      }
+    }
+
+    // Broadcast room update
+    const room = await this.gameService.getRoom(roomId);
+    if (room) {
+      this.server.to(roomId).emit('room_updated', room);
+    }
+
+    // Resume timer for remaining players if any
+    if (this.onlineQueue.size >= this.MIN_PLAYERS_ONLINE) {
+      this.startOnlineMatchTimer();
+    } else {
+      this.broadcastQueueUpdate();
+    }
+  }
+
+  private broadcastQueueUpdate() {
+    const updatePayload = {
+      inQueue: this.onlineQueue.size,
+      timer: this.onlineMatchTimer ? this.matchTimerCountdown : null,
+      minPlayers: this.MIN_PLAYERS_ONLINE,
+      maxPlayers: this.MAX_PLAYERS_ONLINE
+    };
+
+    // Send only to users in queue
+    for (const p of this.onlineQueue.values()) {
+      const sock = this.server.sockets.sockets.get(p.socketId);
+      if (sock) {
+        sock.emit('online_queue_update', updatePayload);
+      }
     }
   }
 }

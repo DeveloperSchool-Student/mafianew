@@ -28,6 +28,8 @@ export enum RoleType {
   BOMBER = 'BOMBER',
   TRAPPER = 'TRAPPER',
   SILENCER = 'SILENCER',
+  WHORE = 'WHORE',
+  JOURNALIST = 'JOURNALIST',
 }
 
 export interface PlayerState {
@@ -43,6 +45,12 @@ export interface PlayerState {
   isSilenced?: boolean;
 }
 
+export interface MatchLog {
+  day: number;
+  phase: string;
+  text: string;
+}
+
 export interface GameState {
   roomId: string;
   phase: GamePhase;
@@ -52,6 +60,7 @@ export interface GameState {
   nightActions: Map<string, any>;
   votes: Map<string, string>;
   bets: Map<string, { faction: string; amount: number }>;
+  logs: MatchLog[];
 }
 
 export interface Room {
@@ -75,5 +84,7 @@ export interface Room {
     enableTrapper?: boolean;
     enableSilencer?: boolean;
     enableLovers?: boolean;
+    enableWhore?: boolean;
+    enableJournalist?: boolean;
   };
 }

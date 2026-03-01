@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards, Request, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Request, Body, BadRequestException, Param } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
@@ -39,6 +39,17 @@ export class UsersController {
   @Get('leaderboard')
   async getLeaderboard() {
     return this.usersService.getLeaderboard();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('find/:username')
+  async findUserByUsername(@Param('username') username: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+      select: { id: true, username: true }
+    });
+    if (!user) throw new BadRequestException('Користувавача не знайдено');
+    return user;
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -173,6 +184,57 @@ export class UsersController {
   ) {
     try {
       return await this.usersService.promoteInClan(req.user.id, body.targetUserId, body.newRole);
+    } catch (e: any) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('clans/war/declare')
+  async declareClanWar(
+    @Request() req: { user: { id: string } },
+    @Body() body: { targetClanId: string, customBet: number }
+  ) {
+    try {
+      return await this.usersService.declareClanWar(req.user.id, body.targetClanId, body.customBet);
+    } catch (e: any) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('clans/war/:id/accept')
+  async acceptClanWar(
+    @Request() req: { user: { id: string } },
+    @Param('id') warId: string
+  ) {
+    try {
+      return await this.usersService.acceptClanWar(req.user.id, warId);
+    } catch (e: any) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('clans/war/:id/reject')
+  async rejectClanWar(
+    @Request() req: { user: { id: string } },
+    @Param('id') warId: string
+  ) {
+    try {
+      return await this.usersService.rejectClanWar(req.user.id, warId);
+    } catch (e: any) {
+      throw new BadRequestException(e.message);
+    }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('clans/wars')
+  async getClanWars(
+    @Request() req: { user: { id: string } }
+  ) {
+    try {
+      return await this.usersService.getClanWars(req.user.id);
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }

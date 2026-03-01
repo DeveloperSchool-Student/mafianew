@@ -5,9 +5,11 @@ import {
     GamePhase,
     RoleType,
     PlayerState,
+    MatchLog,
 } from './game.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class GameService implements OnModuleInit {
@@ -340,6 +342,8 @@ export class GameService implements OnModuleInit {
         if (room.settings?.enableBomber) roles.push(RoleType.BOMBER);
         if (room.settings?.enableTrapper) roles.push(RoleType.TRAPPER);
         if (room.settings?.enableSilencer) roles.push(RoleType.SILENCER);
+        if (room.settings?.enableWhore) roles.push(RoleType.WHORE);
+        if (room.settings?.enableJournalist) roles.push(RoleType.JOURNALIST);
         if (room.settings?.enableLovers) {
             roles.push(RoleType.LOVERS);
             roles.push(RoleType.LOVERS);
@@ -354,7 +358,7 @@ export class GameService implements OnModuleInit {
 
         // Fisher-Yates shuffle for true randomness
         for (let i = roles.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = crypto.randomInt(0, i + 1);
             [roles[i], roles[j]] = [roles[j], roles[i]];
         }
 
@@ -369,7 +373,10 @@ export class GameService implements OnModuleInit {
             nightActions: new Map(),
             votes: new Map(),
             bets: new Map(),
+            logs: [],
         };
+
+        this.pushMatchLog(state, `Гра почалася. Кількість учасників: ${players.length}.`);
 
         await this.saveGameState(state);
 
@@ -439,6 +446,7 @@ export class GameService implements OnModuleInit {
                     'system_chat',
                     `Настає ніч ${state.dayCount}. Місто засинає...`,
                 );
+                this.pushMatchLog(state, `Настає ніч ${state.dayCount}.`);
                 break;
             case GamePhase.NIGHT:
                 await this.resolveNightActions(state, gatewayEmitCb);
@@ -451,6 +459,7 @@ export class GameService implements OnModuleInit {
                     'system_chat',
                     `Настає ранок. Місто прокидається. Обговорення почалося.`,
                 );
+                this.pushMatchLog(state, `Настає ранок. Почалося обговорення.`);
                 break;
             case GamePhase.DAY_DISCUSSION:
                 state.phase = GamePhase.DAY_VOTING;
@@ -460,6 +469,7 @@ export class GameService implements OnModuleInit {
                     'system_chat',
                     `Час голосування! Оберіть підозрілого гравця.`,
                 );
+                this.pushMatchLog(state, `Розпочалося денне голосування.`);
                 break;
             case GamePhase.DAY_VOTING:
                 await this.resolveVoting(state, gatewayEmitCb);
@@ -477,6 +487,14 @@ export class GameService implements OnModuleInit {
         }
 
         gatewayEmitCb(state.roomId, 'phase_changed', state.phase);
+    }
+
+    private pushMatchLog(state: GameState, text: string) {
+        state.logs.push({
+            day: state.dayCount,
+            phase: state.phase,
+            text,
+        });
     }
 
     private async resolveNightActions(state: GameState, gatewayEmitCb: Function) {
@@ -498,6 +516,12 @@ export class GameService implements OnModuleInit {
             if (action.type === 'DEFEND') lawyerTargetId = action.targetId;
             if (action.type === 'GUARD') bodyguardTargetId = action.targetId;
             if (action.type === 'BOMB') bombTargetId = action.targetId;
+
+            const actorUsername = state.players.find(p => p.userId === userId)?.username;
+            const targetUsername = state.players.find(p => p.userId === action.targetId)?.username;
+            if (actorUsername && targetUsername) {
+                this.pushMatchLog(state, `${actorUsername} застосував дію ${action.type} до ${targetUsername}.`);
+            }
         }
 
         if (silencedUserId) {
@@ -576,6 +600,27 @@ export class GameService implements OnModuleInit {
                 const target = state.players.find(p => p.userId === action.targetId);
                 gatewayEmitCb(state.roomId, 'private_action_result', { userId, message: `Роль ${target?.username}: ${target?.role}.` });
             }
+            if (action.type === 'COMPARE') {
+                const ids = action.targetId.split(',');
+                if (ids.length === 2) {
+                    const p1 = state.players.find(p => p.userId === ids[0]);
+                    const p2 = state.players.find(p => p.userId === ids[1]);
+
+                    if (p1 && p2) {
+                        const getFaction = (role: RoleType | null) => {
+                            if (role === RoleType.MAFIA || role === RoleType.DON) return 'MAFIA';
+                            if (role === RoleType.SERIAL_KILLER) return 'MANIAC';
+                            if (role === RoleType.JESTER) return 'JESTER';
+                            return 'CITIZEN';
+                        };
+                        const result = getFaction(p1.role) === getFaction(p2.role) ? 'ОДНАКОВІ' : 'РІЗНІ';
+                        gatewayEmitCb(state.roomId, 'private_action_result', {
+                            userId,
+                            message: `Журналіст: Гравці ${p1.username} та ${p2.username} - ${result} сторони.`
+                        });
+                    }
+                }
+            }
             if (action.type === 'SHERIFF_KILL') {
                 const target = state.players.find((p) => p.userId === action.targetId);
                 const isGuilty = target?.role === RoleType.MAFIA || target?.role === RoleType.DON || target?.role === RoleType.SERIAL_KILLER;
@@ -637,6 +682,7 @@ export class GameService implements OnModuleInit {
                         'system_chat',
                         `Вночі було вбито гравця ${victim.username}.`,
                     );
+                    this.pushMatchLog(state, `Гравець ${victim.username} помер вночі.`);
                     if (victim.lastWill) {
                         gatewayEmitCb(
                             state.roomId,
@@ -653,6 +699,7 @@ export class GameService implements OnModuleInit {
                     'system_chat',
                     `Ця ніч була спокійною. Ніхто не вбивав.`,
                 );
+                this.pushMatchLog(state, `Вночі ніхто не загинув.`);
             }
         }
 
@@ -695,6 +742,10 @@ export class GameService implements OnModuleInit {
         const voteCounts: Record<string, number> = {};
         for (const [voterId, targetId] of state.votes.entries()) {
             const voter = state.players.find(p => p.userId === voterId);
+            const target = targetId === 'SKIP' ? 'пропуск' : state.players.find(p => p.userId === targetId)?.username || targetId;
+            if (voter) {
+                this.pushMatchLog(state, `${voter.username} проголосував за ${target}.`);
+            }
             let power = 1;
             if (voter?.role === RoleType.MAYOR) power = 2;
             if (voter?.role === RoleType.JUDGE) power = 3;
@@ -726,9 +777,10 @@ export class GameService implements OnModuleInit {
                         'system_chat',
                         `Гравець ${victim.username} виявився Блазнем! Він здобув одноосібну ПЕРЕМОГУ!`,
                     );
+                    this.pushMatchLog(state, `Страчено гравця ${victim.username}. Він виявився Блазнем і переміг!`);
                     state.phase = GamePhase.END_GAME;
                     gatewayEmitCb(state.roomId, 'phase_changed', GamePhase.END_GAME);
-                    await this.awardStats(state.roomId, state.players, 'БЛАЗЕНЬ', victim.userId, state.dayCount);
+                    await this.awardStats(state.roomId, state.players, 'БЛАЗЕНЬ', state.logs, victim.userId, state.dayCount);
                     this.scheduleReturnToLobby(state, gatewayEmitCb);
                     return;
                 }
@@ -738,6 +790,7 @@ export class GameService implements OnModuleInit {
                     'system_chat',
                     `За результатами голосування убито ${victim.username}. Його роль: ${victim.role}.`,
                 );
+                this.pushMatchLog(state, `За результатами голосування страчено ${victim.username} (${victim.role}).`);
 
                 if (victim.lastWill) {
                     gatewayEmitCb(
@@ -769,12 +822,14 @@ export class GameService implements OnModuleInit {
                 'system_chat',
                 `Більшість проголосувала за пропуск голосування. Нікого не страчено.`,
             );
+            this.pushMatchLog(state, `Більшість проголосувала за пропуск голосування.`);
         } else {
             gatewayEmitCb(
                 state.roomId,
                 'system_chat',
                 `Голоси розділилися порівну. Нікого не страчено.`,
             );
+            this.pushMatchLog(state, `Голоси розділилися порівну. Нікого не страчено.`);
         }
 
         state.votes.clear();
@@ -820,7 +875,7 @@ export class GameService implements OnModuleInit {
             gatewayEmitCb(state.roomId, 'phase_changed', GamePhase.END_GAME);
 
             // Await stats update here
-            await this.awardStats(state.roomId, state.players, winner, undefined, state.dayCount);
+            await this.awardStats(state.roomId, state.players, winner, state.logs, undefined, state.dayCount);
 
             // Process user bets
             for (const [userId, bet] of state.bets.entries()) {
@@ -863,12 +918,13 @@ export class GameService implements OnModuleInit {
         }, 10000);
     }
 
-    private async awardStats(roomId: string, players: PlayerState[], winner: string, jesterId?: string, dayCount?: number) {
+    private async awardStats(roomId: string, players: PlayerState[], winner: string, logs: MatchLog[], jesterId?: string, dayCount?: number) {
         try {
             const matchData = await this.prisma.match.create({
                 data: {
                     winner,
                     duration: dayCount || 1,
+                    logs: logs ? JSON.stringify(logs) : '[]',
                     participants: {
                         create: await Promise.all(
                             players.filter(p => !p.isSpectator).map(async p => {

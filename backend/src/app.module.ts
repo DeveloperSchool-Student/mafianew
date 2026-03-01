@@ -11,6 +11,10 @@ import { AdminModule } from './admin/admin.module';
 import { FriendsModule } from './friends/friends.module';
 import { PmModule } from './pm/pm.module';
 import { RedisModule } from './redis/redis.module';
+import { MatchesModule } from './matches/matches.module';
+import { MailModule } from './mail/mail.module';
+import { RewardModule } from './reward/reward.module';
+import { TradeController } from './trade/trade.controller';
 
 @Module({
   imports: [
@@ -27,8 +31,11 @@ import { RedisModule } from './redis/redis.module';
     FriendsModule,
     PmModule,
     RedisModule,
+    MatchesModule,
+    MailModule,
+    RewardModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, TradeController],
   providers: [
     AppService,
     // Apply rate limiting globally

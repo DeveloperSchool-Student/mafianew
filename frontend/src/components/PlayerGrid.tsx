@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAppStore } from '../store';
 
 
@@ -8,6 +9,7 @@ interface PlayerGridProps {
 
 export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
     const { user, gameState, socket } = useAppStore();
+    const [selectedJournalistTargets, setSelectedJournalistTargets] = useState<string[]>([]);
 
     // Count votes per player
     const getVoteCount = (targetId: string): number => {
@@ -22,12 +24,29 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
             <div className="space-y-2">
                 {gameState.players?.map((p: any, idx: number) => {
                     const voteCount = getVoteCount(p.userId);
+                    const isSelectedByJournalist = selectedJournalistTargets.includes(p.userId);
                     return (
                         <div
                             key={p.userId || idx}
-                            onClick={() => handleAction(p.userId)}
+                            onClick={() => {
+                                if (!me?.isAlive) return;
+                                if (gameState.phase === 'NIGHT' && me?.role === 'JOURNALIST') {
+                                    if (selectedJournalistTargets.includes(p.userId)) {
+                                        setSelectedJournalistTargets(prev => prev.filter(id => id !== p.userId));
+                                    } else {
+                                        const newTargets = [...selectedJournalistTargets, p.userId];
+                                        setSelectedJournalistTargets(newTargets);
+                                        if (newTargets.length === 2) {
+                                            handleAction(newTargets.join(','));
+                                            setTimeout(() => setSelectedJournalistTargets([]), 100);
+                                        }
+                                    }
+                                } else {
+                                    handleAction(p.userId);
+                                }
+                            }}
                             className={`p-3 rounded flex justify-between items-center border transition-all duration-500 transform ${p.isAlive
-                                ? 'bg-[#1a1a1a] border-gray-700 hover:scale-[1.02] hover:border-mafia-red/50 cursor-pointer shadow-md'
+                                ? `bg-[#1a1a1a] border-gray-700 hover:scale-[1.02] hover:border-mafia-red/50 cursor-pointer shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
                                 : 'bg-black opacity-50 border-gray-900 scale-95 grayscale'
                                 }`}
                         >

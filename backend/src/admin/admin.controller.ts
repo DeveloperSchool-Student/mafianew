@@ -39,6 +39,13 @@ export class AdminController {
     return this.adminService.removeStaffRole(req.user, body);
   }
 
+  /* ── Rooms ── */
+
+  @Get('rooms')
+  getActiveRooms(@Request() req: any) {
+    return this.adminService.getActiveRooms(req.user);
+  }
+
   /* ── Users ── */
 
   @Get('users')
@@ -136,6 +143,33 @@ export class AdminController {
     });
   }
 
+  /* ── Appeals ── */
+
+  @Post('appeals/submit')
+  submitAppeal(
+    @Request() req: any,
+    @Body() body: { type: 'UNBAN' | 'UNMUTE'; reason: string },
+  ) {
+    return this.adminService.submitAppeal(req.user.sub, body);
+  }
+
+  @Get('appeals')
+  listAppeals(@Request() req: any, @Query('status') status?: string) {
+    return this.adminService.listAppeals(req.user, status);
+  }
+
+  @Post('appeals/:id/resolve')
+  resolveAppeal(
+    @Request() req: any,
+    @Param('id') appealId: string,
+    @Body() body: { status: 'APPROVED' | 'REJECTED' },
+  ) {
+    return this.adminService.resolveAppeal(req.user, {
+      appealId,
+      ...body,
+    });
+  }
+
   /* ── Logs ── */
 
   @Get('logs')
@@ -170,5 +204,21 @@ export class AdminController {
   ) {
     // Controller just passes to service, service handles auth/logic
     return this.adminService.setPlayerTitle(req.user, body);
+  }
+
+  /* ── Clan Wars ── */
+
+  @Get('clan-wars')
+  listClanWars(@Request() req: any, @Query('status') status?: string) {
+    return this.adminService.listClanWars(req.user, status);
+  }
+
+  @Post('clan-wars/:id/resolve')
+  resolveClanWar(
+    @Request() req: any,
+    @Param('id') warId: string,
+    @Body() body: { winnerId: string | null },
+  ) {
+    return this.adminService.resolveClanWar(req.user, { warId, winnerId: body.winnerId });
   }
 }

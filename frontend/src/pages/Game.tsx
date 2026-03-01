@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import { Volume2, VolumeX } from 'lucide-react';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { ChatPanel } from '../components/ChatPanel';
 import { PlayerGrid } from '../components/PlayerGrid';
 import { BettingPanel } from '../components/BettingPanel';
+import { audioManager } from '../utils/audio';
 
 export function Game() {
     const { user, gameState, socket, soundSettings, updateSoundSettings } = useAppStore();
@@ -18,11 +19,10 @@ export function Game() {
     const [showSoundSettings, setShowSoundSettings] = useState(false);
     const [showPhaseOverlay, setShowPhaseOverlay] = useState(false);
     const [overlayPhase, setOverlayPhase] = useState<string | null>(null);
-    const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
 
 
 
-    // Simple audio player helper
+    // Simple audio player helper (keeping for backwards compatibility or other sounds if needed)
     const playSound = (soundFile: string) => {
         if (soundSettings.master === 0 || soundSettings.sfx === 0) return;
         const audio = new Audio(`/sounds/${soundFile}`);
@@ -30,40 +30,29 @@ export function Game() {
         audio.play().catch(() => { });
     };
 
-    // Ambient background sounds
+    // Ambient background sounds using the AudioManager
     useEffect(() => {
-        if (!gameState.phase || soundSettings.master === 0 || soundSettings.music === 0) {
-            if (ambientAudioRef.current) {
-                ambientAudioRef.current.pause();
-                ambientAudioRef.current = null;
-            }
+        if (!gameState.phase) {
+            audioManager.pauseBgMusic();
+            audioManager.pauseNightSound();
             return;
         }
 
-        let bgSound = '';
-        if (gameState.phase === 'NIGHT') bgSound = 'ambient_night.mp3';
-        else if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') bgSound = 'ambient_day.mp3';
-
-        if (bgSound) {
-            const desiredVolume = 0.2 * soundSettings.master * soundSettings.music;
-            if (!ambientAudioRef.current || ambientAudioRef.current.src !== window.location.origin + '/sounds/' + bgSound) {
-                if (ambientAudioRef.current) ambientAudioRef.current.pause();
-                ambientAudioRef.current = new Audio(`/sounds/${bgSound}`);
-                ambientAudioRef.current.loop = true;
-                ambientAudioRef.current.volume = desiredVolume; // Background volume lower
-                ambientAudioRef.current.play().catch(() => { });
-            } else if (ambientAudioRef.current.paused) {
-                ambientAudioRef.current.volume = desiredVolume;
-                ambientAudioRef.current.play().catch(() => { });
-            } else {
-                ambientAudioRef.current.volume = desiredVolume;
-            }
+        if (gameState.phase === 'NIGHT') {
+            audioManager.pauseBgMusic();
+            audioManager.playNightSound();
+        } else if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') {
+            audioManager.pauseNightSound();
+            audioManager.playBgMusic();
+        } else {
+            audioManager.pauseBgMusic();
+            audioManager.pauseNightSound();
         }
 
         return () => {
-            // Let it keep playing until phase changes, cleanup handled by logic above
+            // Let it keep playing until phase changes
         };
-    }, [gameState.phase, soundSettings.master, soundSettings.music]);
+    }, [gameState.phase]);
 
     useEffect(() => {
         if (!user) {
@@ -97,6 +86,7 @@ export function Game() {
                     const newP = newGameState.players?.find((p: any) => p.userId === oldP.userId);
                     if (oldP.isAlive && newP && !newP.isAlive) {
                         playSound('death.mp3');
+                        audioManager.playShotSound(); // Also trigger centralized shot sound
                     }
                 });
             }
@@ -191,6 +181,8 @@ export function Game() {
             if (gameState.myRole === 'BOMBER') actionType = 'BOMB';
             if (gameState.myRole === 'TRAPPER') actionType = 'TRAP';
             if (gameState.myRole === 'SILENCER') actionType = 'SILENCE';
+            if (gameState.myRole === 'WHORE') actionType = 'BLOCK';
+            if (gameState.myRole === 'JOURNALIST') actionType = 'COMPARE';
 
             if (actionType) {
                 socket.emit('night_action', { roomId: gameState.roomId, targetId, actionType });
@@ -240,6 +232,8 @@ export function Game() {
             case 'TRAPPER': return t('game.role_TRAPPER', 'ТРАПЕР');
             case 'SILENCER': return t('game.role_SILENCER', 'ГЛУШУВАЧ');
             case 'LOVERS': return t('game.role_LOVERS', 'КОХАНЦІ');
+            case 'WHORE': return t('game.role_WHORE', 'ПОВІЯ');
+            case 'JOURNALIST': return t('game.role_JOURNALIST', 'ЖУРНАЛІСТ');
             default: return role || t('game.unknown');
         }
     };

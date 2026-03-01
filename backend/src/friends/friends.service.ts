@@ -1,9 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from '../game/game.gateway';
 
 @Injectable()
 export class FriendsService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly gameGateway: GameGateway
+    ) { }
 
     async sendRequest(userId: string, friendUsername: string) {
         if (!friendUsername) throw new BadRequestException('Нікнейм не може бути порожнім');
@@ -27,16 +31,26 @@ export class FriendsService {
             if (existing.status === 'blocked') throw new ConflictException('Користувач заблокований');
         }
 
-        return this.prisma.friendship.create({
+        const request = await this.prisma.friendship.create({
             data: {
                 userId,
                 friendId: friend.id,
                 status: 'pending',
             },
             include: {
-                friend: { select: { id: true, username: true, profile: { select: { avatarUrl: true, level: true } } } }
+                friend: { select: { id: true, username: true, profile: { select: { avatarUrl: true, level: true } } } },
+                user: { select: { username: true } } // needed for notification below
             }
         });
+
+        // Notify friend
+        this.gameGateway.server.to(friend.id).emit('notification', {
+            type: 'info',
+            title: 'Новий запит у друзі',
+            message: `Користувач ${request.user.username} хоче додати вас у друзі.`
+        });
+
+        return request;
     }
 
     async acceptRequest(userId: string, friendshipId: string) {
@@ -45,13 +59,23 @@ export class FriendsService {
             throw new NotFoundException('Запит не знайдено або він вже оброблений');
         }
 
-        return this.prisma.friendship.update({
+        const updated = await this.prisma.friendship.update({
             where: { id: friendshipId },
             data: { status: 'accepted' },
             include: {
-                user: { select: { id: true, username: true, profile: { select: { avatarUrl: true, level: true } } } }
+                user: { select: { id: true, username: true, profile: { select: { avatarUrl: true, level: true } } } },
+                friend: { select: { username: true } }
             }
         });
+
+        // Notify original sender
+        this.gameGateway.server.to(updated.userId).emit('notification', {
+            type: 'success',
+            title: 'Запит у друзі прийнято',
+            message: `${updated.friend.username} прийняв(ла) ваш запит.`
+        });
+
+        return updated;
     }
 
     async rejectRequest(userId: string, friendshipId: string) {

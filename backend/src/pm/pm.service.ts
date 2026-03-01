@@ -1,9 +1,13 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameGateway } from '../game/game.gateway';
 
 @Injectable()
 export class PmService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly gameGateway: GameGateway
+    ) { }
 
     async getConversations(userId: string) {
         const messages = await this.prisma.privateMessage.findMany({
@@ -84,7 +88,7 @@ export class PmService {
         });
         if (!friendship) throw new ForbiddenException('Ви можете писати лише друзям');
 
-        return this.prisma.privateMessage.create({
+        const message = await this.prisma.privateMessage.create({
             data: {
                 fromId: userId,
                 toId: targetId,
@@ -94,5 +98,17 @@ export class PmService {
                 from: { select: { id: true, username: true } },
             }
         });
+
+        // Emit notification
+        this.gameGateway.server.to(targetId).emit('notification', {
+            type: 'info',
+            title: `Нове повідомлення від ${message.from.username}`,
+            message: content.trim().substring(0, 50) + (content.length > 50 ? '...' : '')
+        });
+
+        // Also emit specific message event just in case client needs to append to chat
+        this.gameGateway.server.to(targetId).emit('new_message', message);
+
+        return message;
     }
 }

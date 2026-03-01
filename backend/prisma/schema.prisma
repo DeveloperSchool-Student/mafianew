@@ -10,7 +10,17 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   username  String   @unique
+  email     String?  @unique
   password  String
+  
+  // Password Reset Tokens
+  resetToken       String?
+  resetTokenExpiry DateTime?
+
+  // 2FA Fields
+  twoFactorSecret  String?
+  isTwoFactorEnabled Boolean @default(false)
+
   createdAt DateTime @default(now())
   /// Роль для системи прав доступу (OWNER, ADMIN, USER тощо)
   role      String   @default("USER")
@@ -36,6 +46,12 @@ model User {
   /// Reports reporter and target relations
   reportsAsReporter Report[] @relation("ReportReporter")
   reportsAsTarget   Report[] @relation("ReportTarget")
+
+  appeals           Appeal[]
+
+  /// Trades
+  sentTrades        Trade[]  @relation("SentTrades")
+  receivedTrades    Trade[]  @relation("ReceivedTrades")
 }
 
 /// Ієрархія посад адміністрації (рівень 1–9)
@@ -91,6 +107,11 @@ model Profile {
   mutedUntil  DateTime?
   activeFrame String?
   unlockedFrames String[]
+  
+  // Daily Login Rewards
+  lastClaimedRewardAt DateTime?
+  loginStreak       Int       @default(0)
+
   clanId      String?
   clan        Clan?     @relation(fields: [clanId], references: [id])
   clanRole    String    @default("MEMBER") // OWNER | OFFICER | MEMBER
@@ -121,6 +142,10 @@ model Clan {
   members   Profile[]
   /// Агрегований рейтинг клану (для лідерборду кланів)
   rating    Int       @default(0)
+
+  // Clan Wars
+  warsAsChallenger  ClanWar[] @relation("ChallengerClan")
+  warsAsTarget      ClanWar[] @relation("TargetClan")
 }
 
 model Achievement {
@@ -136,6 +161,7 @@ model Match {
   createdAt DateTime  @default(now())
   winner    String
   duration  Int
+  logs      Json?     @default("[]")
   participants MatchParticipant[]
 }
 
@@ -225,4 +251,52 @@ model UserQuest {
   completed   Boolean   @default(false)
   completedAt DateTime?
   createdAt   DateTime  @default(now())
+}
+
+model Appeal {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   // UNBAN | UNMUTE
+  reason      String
+  status      String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Система обміну (Трейди)
+model Trade {
+  id              String   @id @default(uuid())
+  senderId        String
+  sender          User     @relation("SentTrades", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User     @relation("ReceivedTrades", fields: [receiverId], references: [id])
+  
+  // What sender offers
+  offerAmount     Int      @default(0) // Quantity of currency/item
+  offerCurrency   String   // 'SOFT', 'HARD' or item ID
+  
+  // What sender wants
+  requestAmount   Int      @default(0) // Quantity of currency/item
+  requestCurrency String   // 'SOFT', 'HARD' or item ID
+  
+  status          String   @default("PENDING") // PENDING | ACCEPTED | REJECTED | CANCELLED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+/// Кланові Війни
+model ClanWar {
+  id            String   @id @default(uuid())
+  challengerId  String
+  challenger    Clan     @relation("ChallengerClan", fields: [challengerId], references: [id])
+  targetId      String
+  target        Clan     @relation("TargetClan", fields: [targetId], references: [id])
+  status        String   @default("PENDING") // PENDING | ACTIVE | FINISHED | REJECTED
+  winnerId      String?  // null if draw or not finished
+  ratingChange  Int      @default(0) // How much rating the winner gained/loser lost
+  customBet     Int      @default(0)
+  createdAt     DateTime @default(now())
+  endedAt       DateTime?
 }

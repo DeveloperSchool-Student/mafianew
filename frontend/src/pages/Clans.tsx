@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Users, Plus, Shield, LogOut } from 'lucide-react';
+import { Users, Plus, Shield, LogOut, Swords, Check, X } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -12,8 +12,12 @@ export function Clans() {
     const navigate = useNavigate();
     const [profile, setProfile] = useState<any>(null);
     const [clans, setClans] = useState<any[]>([]);
+    const [wars, setWars] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showWarModal, setShowWarModal] = useState(false);
+    const [selectedTargetClan, setSelectedTargetClan] = useState<any>(null);
+    const [warBet, setWarBet] = useState<number | ''>('');
     const [newClanName, setNewClanName] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -29,10 +33,12 @@ export function Clans() {
         setLoading(true);
         Promise.all([
             axios.get(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${user?.token}` } }),
-            axios.get(`${API_URL}/users/clans`, { headers: { Authorization: `Bearer ${user?.token}` } })
-        ]).then(([profileRes, clansRes]) => {
+            axios.get(`${API_URL}/users/clans`, { headers: { Authorization: `Bearer ${user?.token}` } }),
+            axios.get(`${API_URL}/users/clans/wars`, { headers: { Authorization: `Bearer ${user?.token}` } }).catch(() => ({ data: [] }))
+        ]).then(([profileRes, clansRes, warsRes]) => {
             setProfile(profileRes.data);
             setClans(clansRes.data);
+            setWars(warsRes.data);
         }).catch(err => {
             console.error(err);
         }).finally(() => setLoading(false));
@@ -113,9 +119,42 @@ export function Clans() {
         }
     };
 
+    const handleDeclareWar = async () => {
+        if (!selectedTargetClan || warBet === '') return;
+        setActionLoading(true);
+        try {
+            await axios.post(`${API_URL}/users/clans/war/declare`, {
+                targetClanId: selectedTargetClan.id,
+                customBet: Number(warBet)
+            }, { headers: { Authorization: `Bearer ${user?.token}` } });
+            setShowWarModal(false);
+            fetchData();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleWarAction = async (warId: string, action: 'accept' | 'reject') => {
+        setActionLoading(true);
+        try {
+            await axios.post(`${API_URL}/users/clans/war/${warId}/${action}`, {}, {
+                headers: { Authorization: `Bearer ${user?.token}` }
+            });
+            fetchData();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     if (loading || !profile) return <div className="min-h-screen bg-mafia-dark text-white p-8">Завантаження...</div>;
 
     const myClanId = profile.profile?.clanId;
+    const myRole = profile.profile?.clanRole;
+    const canManageWars = myRole === 'OWNER' || myRole === 'OFFICER';
     const myClan = clans.find(c => c.id === myClanId);
     const balance = profile.wallet?.soft || 0;
 
@@ -246,17 +285,68 @@ export function Clans() {
                                                 Вступити
                                             </button>
                                         )}
-                                        {myClanId === clan.id && (
+                                        {myClanId === clan.id ? (
                                             <span className="text-blue-500 font-bold text-sm bg-blue-900/20 px-3 py-1.5 rounded border border-blue-900/50">
                                                 Ваш клан
                                             </span>
-                                        )}
+                                        ) : myClanId && canManageWars ? (
+                                            <button
+                                                onClick={() => { setSelectedTargetClan(clan); setShowWarModal(true); setWarBet(''); }}
+                                                disabled={actionLoading}
+                                                className="text-red-500 hover:text-white bg-red-900/20 hover:bg-red-600 px-3 py-1.5 rounded transition font-bold text-sm border border-red-900/50 flex items-center gap-1 ml-auto"
+                                            >
+                                                <Swords size={14} /> Війна
+                                            </button>
+                                        ) : null}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
+
+                {myClanId && wars.length > 0 && (
+                    <div className="mt-8 bg-[#1a1a1a] rounded-xl border border-gray-800 p-6">
+                        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            <Swords className="text-red-500" /> Активні Війни
+                        </h3>
+                        <div className="space-y-3">
+                            {wars.map(w => {
+                                const isChallenger = w.clan1Id === myClanId;
+                                const enemyName = isChallenger ? w.clan2.name : w.clan1.name;
+                                const canAccept = !isChallenger && w.status === 'PENDING' && canManageWars;
+
+                                return (
+                                    <div key={w.id} className="bg-[#111] p-4 rounded border border-gray-800 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-white font-bold text-lg mb-1">
+                                                {isChallenger ? 'Ви кинули виклик' : 'Вам кинули виклик'} <span className="text-red-500">{enemyName}</span>
+                                            </p>
+                                            <div className="flex gap-4 text-sm text-gray-400">
+                                                <span>Статус: <b className={w.status === 'ACTIVE' ? 'text-green-500' : 'text-yellow-500'}>{w.status}</b></span>
+                                                <span className="flex items-center gap-1">Ставка: <b className="text-yellow-500">{w.customBet}</b> <CoinIcon size={12} /></span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 text-sm">
+                                            {w.status === 'PENDING' && canManageWars && (
+                                                <>
+                                                    {canAccept && (
+                                                        <button onClick={() => handleWarAction(w.id, 'accept')} className="bg-green-600/20 hover:bg-green-600 border border-green-500/50 text-green-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
+                                                            <Check size={16} /> Прийняти
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => handleWarAction(w.id, 'reject')} className="bg-red-600/20 hover:bg-red-600 border border-red-500/50 text-red-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
+                                                        <X size={16} /> {isChallenger ? 'Скасувати' : 'Відхилити'}
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
             </div>
 
@@ -292,6 +382,48 @@ export function Clans() {
                                 className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-bold py-3 rounded transition"
                             >
                                 Створити
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showWarModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-[#111] border border-gray-700 p-8 rounded-xl w-full max-w-md shadow-2xl">
+                        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                            <Swords className="text-red-500" /> Оголосити Війну
+                        </h2>
+                        <p className="text-gray-400 mb-6">Виклик клану <b className="text-red-400">{selectedTargetClan?.name}</b></p>
+
+                        <div className="mb-8">
+                            <label className="block text-gray-400 text-sm mb-2">Ставка монет (необов'язково)</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2"><CoinIcon size={20} /></span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={warBet}
+                                    onChange={e => setWarBet(e.target.value === '' ? '' : Number(e.target.value))}
+                                    className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 pl-10 text-white focus:outline-none focus:border-red-500 transition"
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                onClick={() => setShowWarModal(false)}
+                                className="flex-1 bg-transparent hover:bg-gray-800 text-gray-400 py-3 rounded font-bold transition"
+                            >
+                                Скасувати
+                            </button>
+                            <button
+                                onClick={handleDeclareWar}
+                                disabled={actionLoading}
+                                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 rounded transition flex items-center justify-center gap-2"
+                            >
+                                <Swords size={20} /> У Бій!
                             </button>
                         </div>
                     </div>

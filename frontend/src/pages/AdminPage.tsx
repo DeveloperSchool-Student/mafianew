@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import axios from 'axios';
-import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award } from 'lucide-react';
+import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TITLES } from '../constants/titles';
 
@@ -31,7 +31,7 @@ function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-type Tab = 'reports' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders';
+type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events';
 
 export function AdminPage() {
     const { user } = useAppStore();
@@ -50,11 +50,15 @@ export function AdminPage() {
 
     const tabs: { key: Tab; label: string; icon: any; minPower: number }[] = [
         { key: 'reports', label: t('admin.reports'), icon: FileText, minPower: 1 },
+        { key: 'appeals', label: 'Апеляції', icon: Shield, minPower: 1 },
+        { key: 'clanwars', label: 'Війни Кланів', icon: Swords, minPower: 4 },
         { key: 'users', label: t('admin.users'), icon: Users, minPower: 3 },
+        { key: 'rooms', label: 'Кімнати', icon: Eye, minPower: 3 },
         { key: 'staff', label: t('admin.staff'), icon: UserCog, minPower: 8 },
         { key: 'leaders', label: 'Лідери', icon: Award, minPower: 8 },
         { key: 'logs', label: t('admin.logs'), icon: Activity, minPower: 7 },
         { key: 'duties', label: 'Обов\'язки', icon: FileText, minPower: 1 },
+        { key: 'events', label: 'Івенти', icon: Gift, minPower: 9 },
     ];
 
     return (
@@ -108,11 +112,15 @@ export function AdminPage() {
                 {/* Content */}
                 <main className="flex-1 p-3 sm:p-6 overflow-x-hidden">
                     {tab === 'reports' && <ReportsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
+                    {tab === 'appeals' && <AppealsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
+                    {tab === 'clanwars' && <ClanWarsTab token={user.token} />}
                     {tab === 'users' && <UsersTab token={user.token} myPower={myPower} actionTarget={actionTarget} setActionTarget={setActionTarget} />}
                     {tab === 'staff' && <StaffTab token={user.token} myPower={myPower} />}
+                    {tab === 'rooms' && <RoomsTab token={user.token} />}
                     {tab === 'leaders' && <LeadersTab token={user.token} />}
                     {tab === 'logs' && <LogsTab token={user.token} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'duties' && <DutiesTab />}
+                    {tab === 'events' && <EventsTab token={user.token} />}
                 </main>
             </div>
         </div>
@@ -207,6 +215,82 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
                                             <button onClick={() => quickPunish(r.target.username, 'BAN', 86400, 'Скарги: Бан 1 день')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-2 py-1 rounded transition">Ban 1d</button>
                                         </div>
                                     )}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   APPEALS TAB
+   ═══════════════════════════════════════════════════════════ */
+function AppealsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
+    const [appeals, setAppeals] = useState<any[]>([]);
+    const [filter, setFilter] = useState('PENDING');
+    const [loading, setLoading] = useState(false);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/appeals?status=${filter}`, headers(token));
+            setAppeals(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, [filter]);
+
+    const resolve = async (id: string, status: 'APPROVED' | 'REJECTED') => {
+        if (!confirm(`Ви впевнені, що хочете ${status === 'APPROVED' ? 'СХВАЛИТИ' : 'ВІДХИЛИТИ'} цю апеляцію?`)) return;
+        try {
+            await axios.post(`${API_URL}/admin/appeals/${id}/resolve`, { status }, headers(token));
+            load();
+        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+    };
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold">⚖️ Апеляції</h2>
+                <div className="flex gap-2">
+                    {['PENDING', 'APPROVED', 'REJECTED'].map(s => (
+                        <button key={s} onClick={() => setFilter(s)}
+                            className={`text-xs px-3 py-1.5 rounded border transition ${filter === s ? 'bg-mafia-red/20 border-mafia-red text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}
+                        >{s}</button>
+                    ))}
+                </div>
+            </div>
+
+            {loading ? <p className="text-gray-500">Завантаження...</p> : appeals.length === 0 ? <p className="text-gray-500">Немає апеляцій ({filter}).</p> : (
+                <div className="space-y-3">
+                    {appeals.map(a => (
+                        <div key={a.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-3 sm:p-4">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <p className="text-sm">
+                                        <b className="text-gray-300">Тип:</b> <span className={a.type === 'UNBAN' ? 'text-red-400' : 'text-orange-400 font-bold'}>{a.type}</span>
+                                    </p>
+                                    <p className="text-sm">
+                                        <b className="text-gray-300">Гравець:</b> <button onClick={() => a.user?.username && onUserAction(a.user.username)} className="text-yellow-400 hover:underline">{a.user?.username || a.userId}</button>
+                                    </p>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded ${a.status === 'PENDING' ? 'bg-yellow-900/50 text-yellow-300' : a.status === 'APPROVED' ? 'bg-green-900/50 text-green-300' : 'bg-red-900/50 text-red-300'}`}>
+                                    {a.status}
+                                </span>
+                            </div>
+                            <div className="bg-[#111] p-3 rounded mt-2 text-sm text-gray-300 border border-gray-800">
+                                {a.reason}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-2">{new Date(a.createdAt).toLocaleString('uk-UA')}</p>
+
+                            {a.status === 'PENDING' && myPower >= 2 && (
+                                <div className="flex gap-2 mt-4">
+                                    <button onClick={() => resolve(a.id, 'APPROVED')} className="text-sm bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-4 py-1.5 rounded transition">✅ Схвалити</button>
+                                    <button onClick={() => resolve(a.id, 'REJECTED')} className="text-sm bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-4 py-1.5 rounded transition">❌ Відхилити</button>
                                 </div>
                             )}
                         </div>
@@ -699,6 +783,221 @@ function LeadersTab({ token }: { token: string }) {
                     </button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ROOMS TAB
+   ═══════════════════════════════════════════════════════════ */
+function RoomsTab({ token }: { token: string }) {
+    const [rooms, setRooms] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
+    const { socket } = useAppStore();
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/rooms`, { headers: { Authorization: `Bearer ${token}` } });
+            setRooms(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const spectate = (roomId: string) => {
+        if (!socket) return;
+        socket.emit('join_room', { roomId });
+        navigate('/game');
+    };
+
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6 text-blue-400">👀 Активні Кімнати</h2>
+            <button onClick={load} className="mb-4 bg-[#1a1a1a] border border-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded transition">Оновити</button>
+            {loading ? <p className="text-gray-500">Завантаження...</p> : rooms.length === 0 ? <p className="text-gray-500">Немає активних кімнат.</p> : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {rooms.map((r: any) => (
+                        <div key={r.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-4 flex flex-col justify-between">
+                            <div>
+                                <h3 className="font-bold text-lg text-white mb-2">Кімната: {r.id}</h3>
+                                <p className="text-sm text-gray-400">Статус: <span className={r.status === 'IN_PROGRESS' ? 'text-green-400' : 'text-yellow-400'}>{r.status}</span></p>
+                                <p className="text-sm text-gray-400">Гравців: {r.playersCount}</p>
+                                {r.status === 'IN_PROGRESS' && (
+                                    <>
+                                        <p className="text-sm text-gray-400">Фаза: <span className="text-purple-400">{r.phase}</span></p>
+                                        <p className="text-sm text-gray-400">День: {r.dayCount}</p>
+                                    </>
+                                )}
+                            </div>
+                            <button onClick={() => spectate(r.id)} className="mt-4 bg-blue-900/50 hover:bg-blue-700 text-blue-300 font-bold py-2 px-4 rounded transition w-full flex items-center justify-center gap-2">
+                                <Eye size={16} /> Спостерігати
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EVENTS TAB
+   ═══════════════════════════════════════════════════════════ */
+function EventsTab({ token }: { token: string }) {
+    const [eventName, setEventName] = useState('');
+    const [rewardCoins, setRewardCoins] = useState<number | ''>('');
+    const [loading, setLoading] = useState(false);
+
+    const handleLaunch = async () => {
+        if (!eventName || eventName.trim().length < 3) {
+            alert('Назва івенту занадто коротка. Мінімум 3 символи.');
+            return;
+        }
+
+        if (!confirm(`Ви впевнені, що хочете запустити Глобальний Івент «${eventName}»? Всі онлайн гравці отримають сповіщення${rewardCoins ? ` та ${rewardCoins} монет` : ''}.`)) return;
+
+        setLoading(true);
+        try {
+            const res = await axios.post(`${API_URL}/admin/events/launch`, {
+                eventName,
+                rewardCoins: rewardCoins === '' ? 0 : Number(rewardCoins)
+            }, headers(token));
+
+            alert(`Успіх! ${res.data.message} ${res.data.rewardedUsers ? `(Нагороджено користувачів: ${res.data.rewardedUsers})` : ''}`);
+            setEventName('');
+            setRewardCoins('');
+        } catch (e: any) {
+            alert(e.response?.data?.message || 'Помилка запуску івенту');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-6 text-pink-500">🎁 Запуск Івентів</h2>
+
+            <div className="bg-[#111] border border-gray-700 rounded-xl p-4 md:p-6 max-w-2xl">
+                <p className="text-sm text-gray-400 mb-6">Ця панель дозволяє Власнику запустити Глобальний Івент. Усі гравці отримають сповіщення, а також можна задати суму золота, яку отримає КОЖЕН зареєстрований гравець на сервері.</p>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">Назва Івенту (Повідомлення)</label>
+                        <input
+                            type="text" value={eventName} onChange={e => setEventName(e.target.value)}
+                            placeholder="Наприклад: Зимові Свята 2024!"
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-pink-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-300 mb-2">Нагорода (Монет кожному)</label>
+                        <input
+                            type="number" value={rewardCoins} onChange={e => setRewardCoins(e.target.value === '' ? '' : Number(e.target.value))}
+                            placeholder="Наприклад: 1000 (необов'язково)"
+                            min="0"
+                            className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-pink-500"
+                        />
+                    </div>
+
+                    <div className="mt-8 p-4 bg-pink-900/20 border-l-4 border-pink-500 rounded text-sm text-gray-300">
+                        <p className="font-bold text-white mb-1">Увага! Глобальна Дія</p>
+                        <p>Ця дія відправить повідомлення всім активним гравцям та нарахує золото. Це незворотньо.</p>
+                    </div>
+
+                    <button
+                        onClick={handleLaunch}
+                        disabled={loading || !eventName}
+                        className="w-full bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded transition mt-4"
+                    >
+                        {loading ? 'Запуск...' : '🚀 ЗАПУСТИТИ ІВЕНТ'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CLAN WARS TAB
+   ═══════════════════════════════════════════════════════════ */
+function ClanWarsTab({ token }: { token: string }) {
+    const [wars, setWars] = useState<any[]>([]);
+    const [filter, setFilter] = useState('ACTIVE');
+    const [loading, setLoading] = useState(false);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/clan-wars?status=${filter}`, headers(token));
+            setWars(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, [filter]);
+
+    const resolveWar = async (warId: string, winnerId: string | null) => {
+        if (!confirm(`Ви впевнені, що хочете визначити ${winnerId ? 'переможця' : 'нічию'} для цієї війни?`)) return;
+        try {
+            await axios.post(`${API_URL}/admin/clan-wars/${warId}/resolve`, { winnerId }, headers(token));
+            load();
+        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+    };
+
+    return (
+        <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold flex items-center justify-center gap-2 mb-2"><Swords size={24} /> Війни Кланів (Адмін)</h2>
+                <div className="flex gap-2">
+                    {['PENDING', 'ACTIVE', 'FINISHED', 'CANCELLED'].map(s => (
+                        <button key={s} onClick={() => setFilter(s)}
+                            className={`text-xs px-3 py-1.5 rounded border transition ${filter === s ? 'bg-mafia-red/20 border-mafia-red text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}
+                        >{s}</button>
+                    ))}
+                </div>
+            </div>
+
+            {loading ? <p className="text-gray-500">Завантаження...</p> : wars.length === 0 ? <p className="text-gray-500">Немає війн ({filter}).</p> : (
+                <div className="space-y-3">
+                    {wars.map(w => (
+                        <div key={w.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-4">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="text-center flex-1">
+                                    <h3 className="text-lg font-bold text-blue-400">{w.challenger?.name || w.challengerId}</h3>
+                                    <p className="text-xs text-gray-500">Рейтинг: {w.challenger?.rating || 0}</p>
+                                </div>
+                                <div className="px-4 text-center">
+                                    <span className="text-2xl font-bold text-mafia-red">VS</span>
+                                    <p className="text-xs text-yellow-500 mt-1">Ставка: {w.customBet || 25}</p>
+                                </div>
+                                <div className="text-center flex-1">
+                                    <h3 className="text-lg font-bold text-red-400">{w.target?.name || w.targetId}</h3>
+                                    <p className="text-xs text-gray-500">Рейтинг: {w.target?.rating || 0}</p>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-gray-600 mb-4 text-center">Створено: {new Date(w.createdAt).toLocaleString('uk-UA')}</p>
+
+                            {w.status === 'ACTIVE' && (
+                                <div className="flex gap-2 justify-center border-t border-gray-800 pt-3">
+                                    <button onClick={() => resolveWar(w.id, w.challengerId)} className="text-sm bg-blue-900/50 hover:bg-blue-700 border border-blue-600 text-blue-300 px-4 py-1.5 rounded transition">Перемога (Атакуючі)</button>
+                                    <button onClick={() => resolveWar(w.id, null)} className="text-sm bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 px-4 py-1.5 rounded transition">Нічия</button>
+                                    <button onClick={() => resolveWar(w.id, w.targetId)} className="text-sm bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-4 py-1.5 rounded transition">Перемога (Захисники)</button>
+                                </div>
+                            )}
+
+                            {w.status === 'FINISHED' && (
+                                <div className="text-center pt-3 border-t border-gray-800">
+                                    <p className="text-sm text-green-400 font-bold">Завершено! Переможець: {w.winnerId === w.challengerId ? w.challenger?.name : (w.winnerId === w.targetId ? w.target?.name : 'Нічия')}</p>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

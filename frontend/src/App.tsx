@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from './store'
+import { useNotificationStore } from './store/notificationStore'
 import { Shield } from 'lucide-react'
 
 function App() {
   const user = useAppStore(state => state.user)
+  const socket = useAppStore(state => state.socket)
   const isInitializing = useAppStore(state => state.isInitializing)
   const fetchCurrentUser = useAppStore(state => state.fetchCurrentUser)
   const navigate = useNavigate()
@@ -22,6 +24,24 @@ function App() {
       navigate('/login')
     }
   }, [user, navigate, isInitializing])
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotification = (data: { title: string; message: string; type?: string }) => {
+      useNotificationStore.getState().addNotification({
+        title: data.title,
+        message: data.message,
+        type: (data.type as any) || 'info'
+      });
+    };
+
+    socket.on('notification', handleNotification);
+
+    return () => {
+      socket.off('notification', handleNotification);
+    };
+  }, [socket]);
 
   if (isInitializing) {
     return (

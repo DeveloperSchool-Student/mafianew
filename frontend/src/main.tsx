@@ -15,11 +15,30 @@ import { Collection } from './pages/Collection.tsx'
 import { History } from './pages/History.tsx'
 import { Friends } from './pages/Friends.tsx'
 import { Messages } from './pages/Messages.tsx'
+import { Trades } from './pages/Trades.tsx'
 import { AdminPage } from './pages/AdminPage.tsx'
 import { Guide } from './pages/Guide.tsx'
+import { MatchReplay } from './pages/MatchReplay.tsx'
+import { Privacy } from './pages/Privacy.tsx'
+import { ForgotPassword } from './pages/ForgotPassword.tsx'
+import { ResetPassword } from './pages/ResetPassword.tsx'
 
 // @ts-ignore
 import Twemoji from 'react-twemoji'
+import { NotificationToaster } from './components/NotificationToaster.tsx'
+
+import { registerSW } from 'virtual:pwa-register'
+
+const updateSW = registerSW({
+  onNeedRefresh() {
+    if (confirm('Нова версія доступна! Оновити зараз?')) {
+      updateSW(true)
+    }
+  },
+  onOfflineReady() {
+    console.log('Додаток готовий працювати офлайн')
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -36,14 +55,20 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/clans" element={<Clans />} />
           <Route path="/collection" element={<Collection />} />
           <Route path="/history" element={<History />} />
+          <Route path="/match/:id" element={<MatchReplay />} />
           <Route path="/friends" element={<Friends />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/messages/:id" element={<Messages />} />
+          <Route path="/trades" element={<Trades />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/guide" element={<Guide />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Twemoji>
+      <NotificationToaster />
     </BrowserRouter>
   </StrictMode>,
 )

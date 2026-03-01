@@ -6,6 +6,8 @@ import { LogOut, Users, Play, Plus, Trophy, Settings, Globe, Menu, X } from 'luc
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { ReportModal } from '../components/ReportModal';
+import { DailyRewardModal } from '../components/DailyRewardModal';
+import { LobbyChat } from '../components/LobbyChat';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -18,10 +20,17 @@ export function Lobby() {
     const [isReady, setIsReady] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [isReportOpen, setIsReportOpen] = useState(false);
+    const [isRewardOpen, setIsRewardOpen] = useState(false);
     const [recentPlayers, setRecentPlayers] = useState<string[]>([]);
     const [incomingInvite, setIncomingInvite] = useState<{ roomId: string, inviterUsername: string } | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+    const [onlineQueueInfo, setOnlineQueueInfo] = useState<{ inQueue: number, timer: number | null, minPlayers: number, maxPlayers: number }>({
+        inQueue: 0,
+        timer: null,
+        minPlayers: 5,
+        maxPlayers: 20
+    });
     const [localSettings, setLocalSettings] = useState({
         dayTimerMs: 60000,
         nightTimerMs: 30000,
@@ -38,6 +47,8 @@ export function Lobby() {
         enableTrapper: false,
         enableSilencer: false,
         enableLovers: false,
+        enableWhore: false,
+        enableJournalist: false,
     });
 
 
@@ -118,14 +129,13 @@ export function Lobby() {
             setError(payload?.reason || t('lobby.kicked_from_room'));
         });
 
-        // Online matchmaking events
-        newSocket.on('online_match_found', (data) => {
-            setIsSearchingOnline(false);
-            setGameState({ roomId: data.roomId });
-        });
-
-        newSocket.on('online_queue_update', () => {
-            // Could show queue count here if needed
+        newSocket.on('online_queue_update', (data) => {
+            setOnlineQueueInfo({
+                inQueue: data.inQueue || 0,
+                timer: data.timer !== undefined ? data.timer : null,
+                minPlayers: data.minPlayers || 5,
+                maxPlayers: data.maxPlayers || 20
+            });
         });
 
         setSocket(newSocket);
@@ -172,6 +182,7 @@ export function Lobby() {
 
     /* Navigation buttons for top bar */
     const navButtons = [
+        { label: `🎁 Щоденна Нагорода`, action: () => setIsRewardOpen(true), color: 'red', hideOnMobile: false },
         { label: `📖 ${t('lobby.rules')}`, path: '/guide', color: 'orange', hideOnMobile: true },
         { label: `👥 ${t('lobby.friends')}`, path: '/friends', color: 'emerald', hideOnMobile: true },
         { label: `⚠️ ${t('lobby.report')}`, action: () => { setRecentPlayers(gameState.players ? gameState.players.map(p => p.username) : []); setIsReportOpen(true); }, color: 'red', hideOnMobile: true },
@@ -180,6 +191,7 @@ export function Lobby() {
         { label: `🎭 ${t('lobby.collection')}`, path: '/collection', color: 'pink' },
         { label: <><Trophy size={16} /> {t('lobby.leaderboard')}</>, path: '/leaderboard', color: 'yellow' },
         { label: `📜 ${t('lobby.history')}`, path: '/history', color: 'green' },
+        { label: `🤝 Обмін`, path: '/trades', color: 'teal' },
     ];
 
     return (
@@ -338,7 +350,27 @@ export function Lobby() {
                     <div className="bg-mafia-gray rounded-xl border border-green-800 p-8 sm:p-12 text-center">
                         <div className="animate-spin w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-6"></div>
                         <h2 className="text-2xl font-bold mb-2">{t('lobby.searching')}</h2>
-                        <p className="text-gray-500 text-sm mb-8">{t('lobby.online_desc')}</p>
+                        <p className="text-gray-500 text-sm mb-4">{t('lobby.online_desc')}</p>
+
+                        <div className="bg-[#111] p-4 rounded-lg border border-gray-800 mb-8 max-w-sm mx-auto">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-400 font-medium">У черзі:</span>
+                                <span className="text-xl font-bold text-white">{onlineQueueInfo.inQueue} / {onlineQueueInfo.maxPlayers}</span>
+                            </div>
+
+                            {onlineQueueInfo.timer !== null ? (
+                                <div className="mt-4 p-3 bg-green-900/40 border border-green-700/50 rounded animate-pulse">
+                                    <p className="text-green-400 font-bold mb-1">Гра почнеться через</p>
+                                    <p className="text-3xl font-mono text-white">{onlineQueueInfo.timer} сек</p>
+                                </div>
+                            ) : (
+                                <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700/50 rounded">
+                                    <p className="text-gray-400 text-sm">Очікування гравців...</p>
+                                    <p className="text-xs text-gray-500 mt-1">Необхідно мінімум {onlineQueueInfo.minPlayers}</p>
+                                </div>
+                            )}
+                        </div>
+
                         <button onClick={handleLeaveOnline} className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-bold py-3 px-8 rounded transition-colors">
                             {t('lobby.stop_search')}
                         </button>
@@ -472,6 +504,8 @@ export function Lobby() {
                                                 enableTrapper: 'Трапер',
                                                 enableSilencer: 'Глушувач',
                                                 enableLovers: 'Коханці',
+                                                enableWhore: 'Повія',
+                                                enableJournalist: 'Журналіст',
                                             }).map(([key, label]) => (
                                                 <div className="col-span-1 flex items-center gap-2" key={key}>
                                                     <input
@@ -501,7 +535,7 @@ export function Lobby() {
                                         <div>🤡 {t('lobby.role_jester').split(' (')[0]}: <b>{gameState.settings?.enableJester === false ? t('lobby.off') : t('lobby.on')}</b></div>
 
                                         {/* Display only enabled extra roles */}
-                                        {['Lawyer', 'Bodyguard', 'Tracker', 'Informer', 'Mayor', 'Judge', 'Bomber', 'Trapper', 'Silencer', 'Lovers'].map((role) => {
+                                        {['Lawyer', 'Bodyguard', 'Tracker', 'Informer', 'Mayor', 'Judge', 'Bomber', 'Trapper', 'Silencer', 'Lovers', 'Whore', 'Journalist'].map((role) => {
                                             const settingsKey = `enable${role}`;
                                             return gameState.settings?.[settingsKey as keyof typeof gameState.settings] ? (
                                                 <div key={role}>✅ {role}</div>
@@ -545,6 +579,15 @@ export function Lobby() {
                 onClose={() => setIsReportOpen(false)}
                 recentPlayers={recentPlayers}
             />
+
+            <DailyRewardModal
+                isOpen={isRewardOpen}
+                onClose={() => setIsRewardOpen(false)}
+            />
+
+            {!gameState.roomId && !isSearchingOnline && (
+                <LobbyChat />
+            )}
         </div>
     );
 }

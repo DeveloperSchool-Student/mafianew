@@ -100,9 +100,17 @@ export function History() {
                                         <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12} /> {new Date(h.match.createdAt).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })}</p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className={`font-bold uppercase tracking-wider ${h.won ? 'text-green-500' : 'text-red-500'}`}>{h.won ? 'ПЕРЕМОГА' : 'ПОРАЗКА'}</p>
-                                    <p className="text-xs text-gray-400 flex items-center justify-end gap-1 mt-1"><Trophy size={10} /> Перемогли: {h.match.winner} ({h.match.duration} Днів)</p>
+                                <div className="text-right flex flex-col items-end gap-2">
+                                    <div>
+                                        <p className={`font-bold uppercase tracking-wider ${h.won ? 'text-green-500' : 'text-red-500'}`}>{h.won ? 'ПЕРЕМОГА' : 'ПОРАЗКА'}</p>
+                                        <p className="text-xs text-gray-400 flex items-center justify-end gap-1 mt-1"><Trophy size={10} /> Перемогли: {h.match.winner} ({h.match.duration} Днів)</p>
+                                    </div>
+                                    <button
+                                        onClick={() => navigate(`/match/${h.match.id}`)}
+                                        className="text-xs bg-[#222] hover:bg-[#333] border border-gray-700 text-white py-1 px-3 rounded transition"
+                                    >
+                                        Подивитися Реплей
+                                    </button>
                                 </div>
                             </div>
                         ))}

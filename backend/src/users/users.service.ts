@@ -213,6 +213,103 @@ export class UsersService {
     });
   }
 
+  async getClanWars(userId: string) {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile?.clanId) return [];
+
+    return this.prisma.clanWar.findMany({
+      where: {
+        OR: [
+          { challengerId: profile.clanId },
+          { targetId: profile.clanId }
+        ],
+        status: { in: ['PENDING', 'ACTIVE'] }
+      },
+      include: {
+        challenger: { select: { name: true } },
+        target: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async declareClanWar(userId: string, targetClanId: string, customBet: number) {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile?.clanId) throw new Error('Ви не у клані');
+    if (profile.clanRole !== 'OWNER' && profile.clanRole !== 'OFFICER') {
+      throw new Error('Тільки лідер або офіцери можуть оголошувати війну');
+    }
+
+    if (profile.clanId === targetClanId) throw new Error('Не можна оголосити війну своєму клану');
+
+    if (customBet < 0) throw new Error('Ставка не може бути від\'ємною');
+
+    // Check if a pending or active war already exists
+    const existingWar = await this.prisma.clanWar.findFirst({
+      where: {
+        OR: [
+          { challengerId: profile.clanId, targetId: targetClanId, status: { in: ['PENDING', 'ACTIVE'] } },
+          { challengerId: targetClanId, targetId: profile.clanId, status: { in: ['PENDING', 'ACTIVE'] } }
+        ]
+      }
+    });
+
+    if (existingWar) throw new Error('З цим кланом вже є активна або очікуюча війна');
+
+    return this.prisma.clanWar.create({
+      data: {
+        challengerId: profile.clanId,
+        targetId: targetClanId,
+        customBet: customBet || 0
+      }
+    });
+  }
+
+  async acceptClanWar(userId: string, warId: string) {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile?.clanId) throw new Error('Ви не у клані');
+    if (profile.clanRole !== 'OWNER' && profile.clanRole !== 'OFFICER') {
+      throw new Error('Тільки лідер або офіцери можуть приймати війну');
+    }
+
+    const war = await this.prisma.clanWar.findUnique({ where: { id: warId } });
+    if (!war) throw new Error('Війну не знайдено');
+
+    // The user accepting must belong to the target clan (the challenged clan)
+    if (war.targetId !== profile.clanId) {
+      throw new Error('Ви не можете прийняти цю війну');
+    }
+    if (war.status !== 'PENDING') throw new Error('Війна вже не в статусі очікування');
+
+    return this.prisma.clanWar.update({
+      where: { id: warId },
+      data: { status: 'ACTIVE' }
+    });
+  }
+
+  async rejectClanWar(userId: string, warId: string) {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile?.clanId) throw new Error('Ви не у клані');
+    if (profile.clanRole !== 'OWNER' && profile.clanRole !== 'OFFICER') {
+      throw new Error('Тільки лідер або офіцери можуть відхиляти/скасовувати війну');
+    }
+
+    const war = await this.prisma.clanWar.findUnique({ where: { id: warId } });
+    if (!war) throw new Error('Війну не знайдено');
+
+    // Either challenger (canceling) or target (rejecting) can reject/cancel a PENDING war
+    if (war.challengerId !== profile.clanId && war.targetId !== profile.clanId) {
+      throw new Error('У вас немає доступу до цієї війни');
+    }
+
+    if (war.status !== 'PENDING') throw new Error('Не можна скасувати активну або завершену війну');
+
+    return this.prisma.clanWar.update({
+      where: { id: warId },
+      data: { status: 'CANCELLED' }
+    });
+  }
+
   async getOrCreateDailyQuests(userId: string) {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) throw new Error('Профіль не знайдено');
