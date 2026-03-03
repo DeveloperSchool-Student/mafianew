@@ -1,73 +1,65 @@
-# React + TypeScript + Vite
+# Mafia Game - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Modern, feature-rich web client for the Multiplayer Mafia game, built with React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Real-time Multiplayer:** Play classic Mafia with various roles (Serial Killer, Escort, Jester, Lawyer, Bodyguard, Mayor, etc.) using WebSockets.
+- **Matchmaking & Lobbies:** Create private games, join via room codes, or queue for online matchmaking.
+- **Social Features:** Friends system, direct messaging, user profiles, and trading.
+- **Clans & Wars:** Form clans, manage members, and declare wars on other clans with a dedicated leaderboard.
+- **Store & Inventory:** Purchase cosmetics, roles, and items. Trade them with other players.
+- **Localization:** Full support for both English (en) and Ukrainian (uk) languages.
+- **PWA Ready:** Installable as a Progressive Web App on mobile and desktop devices.
+- **Admin Panel:** Comprehensive Role-Based Access Control (RBAC) system for game staff with up to 9 power levels for moderation.
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Framework:** React 18 + Vite
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS (Vanilla CSS & utilities)
+- **State Management:** Zustand
+- **Networking:** Socket.IO Client
+- **Routing:** React Router DOM
+- **Icons:** Lucide React
+- **Internationalization:** i18next
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
+- Node.js (v18+ recommended)
+- npm or yarn
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Installation generated
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. Set up environment variables:
+   Create a `.env` file in the root of the `frontend` directory:
+   ```env
+   VITE_API_URL=http://localhost:3000
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+### Building for Production
+
+To create a production build:
+```bash
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+This command will output the compiled assets to the `dist` folder. You can test the built app with:
+```bash
+npm run preview
 ```
+
+## Supported Roles
+- **Standard:** Mafia, Don, Detective, Doctor, Citizen
+- **Neutral / Special:** Serial Killer, Escort, Jester, Lawyer, Bodyguard, Tracker, Informer, Mayor, Judge, Bomber, Trapper, Silencer, Lovers, Whore, Journalist

@@ -76,7 +76,7 @@ export function Lobby() {
         });
 
         newSocket.on('connect', () => {
-            setError(null);
+            setError('');
             newSocket.emit('check_active_game');
         });
 
@@ -87,7 +87,7 @@ export function Lobby() {
         });
 
         newSocket.io.on('reconnect', () => {
-            setError(null);
+            setError('');
             newSocket.emit('check_active_game');
         });
 
