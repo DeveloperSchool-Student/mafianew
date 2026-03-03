@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RoleType } from './game.types';
 import { SkipThrottle } from '@nestjs/throttler';
 import { sanitize } from '../utils/sanitize';
+import { getStaffPower } from '../admin/admin.roles';
 
 @SkipThrottle()
 @WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN || '*' } })
@@ -26,6 +27,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Rate limiting for room creation: userId -> timestamps[]
   private roomCreationTimestamps: Map<string, number[]> = new Map();
+
+  // Global Chat History in RAM
+  private globalChatHistory: any[] = [];
 
   constructor(
     private readonly gameService: GameService,
@@ -89,6 +93,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('check_active_game')
   async handleCheckActiveGame(@ConnectedSocket() client: Socket) {
     const userId = client.data.user.sub;
+    client.emit('global_chat_history', this.globalChatHistory);
     const activeGameRoomId = await this.gameService.findActiveGameForUser(userId);
 
     if (activeGameRoomId) {
@@ -434,12 +439,31 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (!state) {
       // Lobby Chat
-      this.server.emit('global_chat_message', {
+      if (data.message === '/clear') {
+        const userRoleKey = client.data?.user?.staffRoleKey;
+        const power = getStaffPower(userRoleKey);
+        if (power >= 4) {
+          this.globalChatHistory = [];
+          this.server.emit('chat_cleared');
+        } else {
+          client.emit('error', 'Вам недоступна ця команда.');
+        }
+        return;
+      }
+
+      const msgObj = {
         id: Date.now().toString() + Math.random().toString().substring(2, 6),
         sender: username,
         text: data.message,
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      this.globalChatHistory.push(msgObj);
+      if (this.globalChatHistory.length > 100) {
+        this.globalChatHistory.shift();
+      }
+
+      this.server.emit('global_chat_message', msgObj);
       return;
     }
 

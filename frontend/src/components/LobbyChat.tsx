@@ -20,13 +20,30 @@ export function LobbyChat() {
         if (!socket) return;
 
         const handleGlobalChat = (msg: ChatMessage) => {
-            setMessages((prev) => [...prev, msg].slice(-50)); // Keep last 50 messages
+            setMessages((prev) => [...prev, msg].slice(-100)); // Keep last 100 messages
+        };
+
+        const handleGlobalChatHistory = (history: ChatMessage[]) => {
+            setMessages(history.slice(-100)); // Load exact history
+        };
+
+        const handleChatCleared = () => {
+            setMessages([{
+                id: 'system-clear-' + Date.now(),
+                sender: 'SYSTEM',
+                text: 'Чат був очищений адміністратором',
+                timestamp: new Date().toISOString()
+            }]);
         };
 
         socket.on('global_chat_message', handleGlobalChat);
+        socket.on('global_chat_history', handleGlobalChatHistory);
+        socket.on('chat_cleared', handleChatCleared);
 
         return () => {
             socket.off('global_chat_message', handleGlobalChat);
+            socket.off('global_chat_history', handleGlobalChatHistory);
+            socket.off('chat_cleared', handleChatCleared);
         };
     }, [socket]);
 
