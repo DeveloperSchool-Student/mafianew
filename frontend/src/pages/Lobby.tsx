@@ -338,16 +338,16 @@ export function Lobby() {
                             <Users size={40} className="text-gray-400 mb-3 sm:mb-4" />
                             <h3 className="text-lg sm:text-xl font-bold mb-2">{t('lobby.join')}</h3>
                             <p className="text-gray-500 text-xs sm:text-sm mb-4 sm:mb-6">{t('lobby.join_desc')}</p>
-                            <div className="flex w-full gap-2">
+                            <div className="flex w-full gap-2 overflow-hidden">
                                 <input
                                     type="text"
                                     value={inputRoomId}
                                     onChange={e => setInputRoomId(e.target.value)}
                                     placeholder={t('lobby.join_code_placeholder')}
                                     maxLength={6}
-                                    className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white text-center font-mono focus:border-white focus:outline-none uppercase tracking-[0.3em] text-lg"
+                                    className="flex-1 min-w-0 w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white text-center font-mono focus:border-white focus:outline-none uppercase tracking-[0.3em] text-base sm:text-lg box-border"
                                 />
-                                <button onClick={handleJoin} className="px-6 bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition-colors uppercase text-sm">
+                                <button onClick={handleJoin} className="shrink-0 px-4 sm:px-6 bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition-colors uppercase text-sm">
                                     {t('lobby.join')}
                                 </button>
                             </div>
