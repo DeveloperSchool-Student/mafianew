@@ -693,6 +693,14 @@ function DutiesTab() {
                     <p>Кожна ваша дія логується та може бути перевірена Старшою адміністрацією або Власником.</p>
                     <p>Перевищення повноважень або порушення цих правил карається <b>попередженням</b>, <b>пониженням рангу</b> або <b>повним зняттям повноважень</b> з можливим блокуванням акаунту.</p>
                 </div>
+
+                <a
+                    href="/punishment-grid"
+                    target="_blank"
+                    className="mt-6 block w-full text-center bg-orange-600/20 hover:bg-orange-600/40 border border-orange-500/50 text-orange-400 hover:text-orange-300 font-bold py-3 rounded transition text-sm"
+                >
+                    📋 Відкрити Сітку Покарань (окремою сторінкою)
+                </a>
             </div>
         </div>
     );
@@ -850,6 +858,23 @@ function EventsTab({ token }: { token: string }) {
     const [eventName, setEventName] = useState('');
     const [rewardCoins, setRewardCoins] = useState<number | ''>('');
     const [loading, setLoading] = useState(false);
+    const [enableEventRoles, setEnableEventRoles] = useState(false);
+    const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+    const EVENT_ROLES = [
+        { key: 'KRAMPUS', label: 'Крампус', emoji: '👹', desc: 'Щоночі "карає" одного гравця, блокуючи його та знімаючи одну дію' },
+        { key: 'CUPID', label: 'Купідон', emoji: '💘', desc: 'Першої ночі обирає двох закоханих. Якщо один помирає — інший також' },
+        { key: 'SNOWMAN', label: 'Сніговик', emoji: '⛄', desc: 'Заморожує одного гравця вночі — той не може голосувати наступного дня' },
+        { key: 'WITCH', label: 'Відьма', emoji: '🧙‍♀️', desc: 'Має одне зілля зцілення та одне зілля отрути на всю гру' },
+        { key: 'SANTA', label: 'Санта', emoji: '🎅', desc: 'Щоночі дарує "подарунок" — випадкова корисна дія одному гравцю' },
+        { key: 'GHOST', label: 'Привид', emoji: '👻', desc: 'Після смерті може ще одну ніч діяти з потойбіччя' },
+    ];
+
+    const toggleRole = (key: string) => {
+        setSelectedRoles(prev =>
+            prev.includes(key) ? prev.filter(r => r !== key) : [...prev, key]
+        );
+    };
 
     const handleLaunch = async () => {
         if (!eventName || eventName.trim().length < 3) {
@@ -857,18 +882,25 @@ function EventsTab({ token }: { token: string }) {
             return;
         }
 
-        if (!confirm(`Ви впевнені, що хочете запустити Глобальний Івент «${eventName}»? Всі онлайн гравці отримають сповіщення${rewardCoins ? ` та ${rewardCoins} монет` : ''}.`)) return;
+        const rolesText = enableEventRoles && selectedRoles.length > 0
+            ? `\nУвімкнені івент-ролі: ${selectedRoles.map(r => EVENT_ROLES.find(er => er.key === r)?.label).join(', ')}`
+            : '';
+
+        if (!confirm(`Ви впевнені, що хочете запустити Глобальний Івент «${eventName}»? Всі онлайн гравці отримають сповіщення${rewardCoins ? ` та ${rewardCoins} монет` : ''}.${rolesText}`)) return;
 
         setLoading(true);
         try {
             const res = await axios.post(`${API_URL}/admin/events/launch`, {
                 eventName,
-                rewardCoins: rewardCoins === '' ? 0 : Number(rewardCoins)
+                rewardCoins: rewardCoins === '' ? 0 : Number(rewardCoins),
+                eventRoles: enableEventRoles ? selectedRoles : []
             }, headers(token));
 
-            alert(`Успіх! ${res.data.message} ${res.data.rewardedUsers ? `(Нагороджено користувачів: ${res.data.rewardedUsers})` : ''}`);
+            alert(`Успіх! ${res.data.message} ${res.data.rewardedUsers ? `(Нагороджено користувачів: ${res.data.rewardedUsers})` : ''}${res.data.activatedRoles?.length ? `\nАктивовані ролі: ${res.data.activatedRoles.join(', ')}` : ''}`);
             setEventName('');
             setRewardCoins('');
+            setSelectedRoles([]);
+            setEnableEventRoles(false);
         } catch (e: any) {
             alert(e.response?.data?.message || 'Помилка запуску івенту');
         }
@@ -902,9 +934,56 @@ function EventsTab({ token }: { token: string }) {
                         />
                     </div>
 
+                    {/* EVENT ROLES SECTION */}
+                    <div className="border border-purple-800/50 rounded-lg overflow-hidden">
+                        <button
+                            onClick={() => setEnableEventRoles(!enableEventRoles)}
+                            className={`w-full flex items-center justify-between p-4 transition ${enableEventRoles ? 'bg-purple-900/30' : 'bg-[#1a1a1a] hover:bg-[#222]'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition ${enableEventRoles ? 'bg-purple-600 border-purple-400' : 'border-gray-600'}`}>
+                                    {enableEventRoles && <span className="text-white text-xs">✓</span>}
+                                </div>
+                                <span className="font-bold text-white text-sm">✨ Увімкнути Івент-ролі</span>
+                            </div>
+                            <span className="text-xs text-gray-500">{enableEventRoles ? `(${selectedRoles.length} обрано)` : ''}</span>
+                        </button>
+
+                        {enableEventRoles && (
+                            <div className="p-4 border-t border-purple-800/30 space-y-2">
+                                <p className="text-xs text-gray-400 mb-3">Оберіть спеціальні ролі, які почнуть випадати гравцям у нових матчах під час дії івенту:</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {EVENT_ROLES.map(role => {
+                                        const isSelected = selectedRoles.includes(role.key);
+                                        return (
+                                            <button
+                                                key={role.key}
+                                                onClick={() => toggleRole(role.key)}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border text-left transition ${isSelected
+                                                    ? 'bg-purple-900/40 border-purple-500/50'
+                                                    : 'bg-[#111] border-gray-800 hover:border-gray-600'}`}
+                                            >
+                                                <div className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 ${isSelected ? 'bg-purple-600 border-purple-400' : 'border-gray-600'}`}>
+                                                    {isSelected && <span className="text-white text-xs">✓</span>}
+                                                </div>
+                                                <div>
+                                                    <span className="font-bold text-white text-sm">{role.emoji} {role.label}</span>
+                                                    <p className="text-xs text-gray-500 mt-0.5">{role.desc}</p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="mt-8 p-4 bg-pink-900/20 border-l-4 border-pink-500 rounded text-sm text-gray-300">
                         <p className="font-bold text-white mb-1">Увага! Глобальна Дія</p>
                         <p>Ця дія відправить повідомлення всім активним гравцям та нарахує золото. Це незворотньо.</p>
+                        {enableEventRoles && selectedRoles.length > 0 && (
+                            <p className="mt-2 text-purple-400">Обрані ролі почнуть випадати у всіх нових матчах до завершення івенту.</p>
+                        )}
                     </div>
 
                     <button

@@ -23,6 +23,12 @@ export class TradeService {
             throw new BadRequestException('Ви не можете торгувати самі з собою.');
         }
 
+        // Coerce to integer and validate
+        params.offerAmount = Math.floor(Number(params.offerAmount));
+        params.requestAmount = Math.floor(Number(params.requestAmount));
+        if (!Number.isFinite(params.offerAmount) || !Number.isFinite(params.requestAmount)) {
+            throw new BadRequestException('Некоректна сума обміну.');
+        }
         if (params.offerAmount < 0 || params.requestAmount < 0) {
             throw new BadRequestException('Сума обміну не може бути від\'ємною.');
         }

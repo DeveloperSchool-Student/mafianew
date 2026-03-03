@@ -242,6 +242,10 @@ export class GameService implements OnModuleInit {
         const player = state.players.find((p) => p.userId === userId);
         if (!player || !player.isAlive) return;
 
+        player.isOnline = false;
+        await this.saveGameState(state);
+        gatewayEmitCb(roomId, 'game_state_update', await this.getFilteredStateForUser(roomId, userId));
+
         // Note: setTimeout inside a scalable service is anti-pattern if servers restart,
         // but since we only have one node mostly, it's fine for now. Proper way is Redis delayed queues.
         if (this.intervals.has(`disconnect_${userId}`)) clearTimeout(this.intervals.get(`disconnect_${userId}`)!);
@@ -273,10 +277,22 @@ export class GameService implements OnModuleInit {
         this.intervals.set(`disconnect_${userId}`, timer);
     }
 
-    async handlePlayerReconnect(roomId: string, userId: string) {
+    async handlePlayerReconnect(roomId: string, userId: string, gatewayEmitCb?: (roomId: string, event: string, payload?: any) => void) {
         if (this.intervals.has(`disconnect_${userId}`)) {
             clearTimeout(this.intervals.get(`disconnect_${userId}`)!);
             this.intervals.delete(`disconnect_${userId}`);
+        }
+
+        const state = await this.getGameState(roomId);
+        if (state) {
+            const player = state.players.find((p) => p.userId === userId);
+            if (player && player.isAlive) {
+                player.isOnline = true;
+                await this.saveGameState(state);
+                if (gatewayEmitCb) {
+                    gatewayEmitCb(roomId, 'game_state_update', await this.getFilteredStateForUser(roomId, userId));
+                }
+            }
         }
     }
 
@@ -1106,6 +1122,13 @@ export class GameService implements OnModuleInit {
         };
         const allowed = allowedActions[player.role || ''];
         if (!allowed || !allowed.includes(actionType)) return false;
+
+        // Check if player is already blocked by Escort this night
+        for (const [, action] of state.nightActions.entries()) {
+            if (action.type === 'BLOCK' && action.targetId === userId) {
+                return false; // Blocked by Escort — action rejected
+            }
+        }
 
         // For KILL actions by MAFIA/DON, use a shared "mafia_kill" slot
         // so multiple mafia members agree on a single target

@@ -247,7 +247,7 @@ export function Clans() {
                     <div className="flex justify-end mb-6">
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded transition flex items-center gap-2"
+                            className="bg-mafia-red hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition flex items-center gap-2 shadow-[0_0_10px_rgba(204,0,0,0.3)]"
                         >
                             <Plus size={20} /> Створити Клан (1000 <CoinIcon size={16} />)
                         </button>

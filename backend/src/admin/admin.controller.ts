@@ -221,4 +221,14 @@ export class AdminController {
   ) {
     return this.adminService.resolveClanWar(req.user, { warId, winnerId: body.winnerId });
   }
+
+  /* ── Events ── */
+
+  @Post('events/launch')
+  launchEvent(
+    @Request() req: any,
+    @Body() body: { eventName: string; rewardCoins?: number; eventRoles?: string[] },
+  ) {
+    return this.adminService.launchEvent(req.user, body);
+  }
 }

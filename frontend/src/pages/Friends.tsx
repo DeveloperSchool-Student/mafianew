@@ -187,14 +187,14 @@ export function Friends() {
                                                     {gameState.roomId && (
                                                         <button onClick={() => {
                                                             socket?.emit('invite_to_room', { targetUserId: f.friend.id, roomId: gameState.roomId });
-                                                        }} className="bg-green-900/30 hover:bg-green-800 text-green-400 p-2 rounded transition-colors border border-green-800/50" title="Запросити в кімнату">
+                                                        }} className="bg-green-900/40 hover:bg-green-700 text-green-300 p-2 rounded transition-colors border border-green-600/50" title="Запросити в кімнату">
                                                             <UserPlus size={18} />
                                                         </button>
                                                     )}
-                                                    <button onClick={() => navigate(`/messages/${f.friend.id}`)} className="bg-blue-900/30 hover:bg-blue-800 text-blue-400 p-2 rounded transition-colors border border-blue-800/50" title="Написати">
+                                                    <button onClick={() => navigate(`/messages/${f.friend.id}`)} className="bg-blue-900/40 hover:bg-blue-700 text-blue-300 p-2 rounded transition-colors border border-blue-600/50" title="Написати">
                                                         <MessageSquare size={18} />
                                                     </button>
-                                                    <button onClick={() => handleRemove(f.id)} className="bg-red-900/30 hover:bg-red-800 text-red-400 p-2 rounded transition-colors border border-red-800/50" title="Видалити">
+                                                    <button onClick={() => handleRemove(f.id)} className="bg-red-900/40 hover:bg-red-700 text-red-300 p-2 rounded transition-colors border border-red-600/50" title="Видалити">
                                                         <Trash2 size={18} />
                                                     </button>
                                                 </div>

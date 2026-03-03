@@ -24,7 +24,7 @@ export function Privacy() {
                         </div>
                         <div>
                             <h1 className="text-3xl font-bold text-white uppercase tracking-widest">Політика Конфіденційності</h1>
-                            <p className="text-sm text-gray-500 mt-1">Останнє оновлення: Лютий 2026</p>
+                            <p className="text-sm text-gray-500 mt-1">Останнє оновлення: Березень 2026</p>
                         </div>
                     </div>
 
@@ -51,30 +51,65 @@ export function Privacy() {
                             </ul>
                         </section>
 
+                        <section>
+                            <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-mafia-red"></span> 3. Використання Cookie та LocalStorage
+                            </h2>
+                            <p>
+                                Ми використовуємо технології LocalStorage та Cookie для збереження вашого токена авторизації (JWT),
+                                мовних налаштувань та інших технічних параметрів сесії. Ці дані зберігаються виключно у вашому браузері
+                                та необхідні для коректної роботи сайту. Ми не використовуємо сторонні трекінгові Cookie.
+                            </p>
+                        </section>
+
                         <section className="bg-red-950/20 border-l-4 border-mafia-red p-5 my-8 rounded-r-lg shadow-inner">
                             <h2 className="text-lg font-bold text-red-500 mb-2 uppercase tracking-wide">
-                                ⚠️ 3. Відмова від відповідальності (Disclaimer)
+                                ⚠️ 4. Обмеження відповідальності (Disclaimer)
                             </h2>
                             <p className="text-red-200/90 font-medium">
-                                Адміністрація проекту вживає всіх розумних заходів для захисту бази даних. Однак, у разі
-                                <strong className="text-white"> несанкціонованого доступу (злому)</strong> до серверів або баз даних проекту:
+                                Адміністрація проєкту Mafia Online вживає всіх розумних організаційних та технічних заходів
+                                для захисту персональних даних користувачів відповідно до найкращих галузевих практик.
                             </p>
                             <ul className="list-disc pl-5 mt-3 space-y-1 text-red-300 font-medium">
-                                <li>Адміністрація не несе жодної фінансової або юридичної відповідальності.</li>
                                 <li>
-                                    Ми категорично попереджаємо, що ми <strong className="text-red-400">не несемо відповідальності за збереження або безпеку даних прив'язаних сторонніх акаунтів (Google, Discord, Telegram тощо).</strong>
+                                    У разі <strong className="text-white">несанкціонованого доступу (злому)</strong> до серверів,
+                                    який стався незважаючи на вжиті заходи безпеки, адміністрація зобов'язується повідомити
+                                    постраждалих користувачів у найкоротші терміни та вжити всіх можливих заходів для мінімізації наслідків.
                                 </li>
-                                <li>Рекомендуємо використовувати унікальні паролі та включити 2FA (Двофакторну аутентифікацію) для ваших основних соціальних мереж та пошт.</li>
+                                <li>
+                                    Адміністрація <strong className="text-red-400">не несе відповідальності за безпеку облікових записів
+                                        сторонніх сервісів</strong> (Google, Discord, Telegram тощо), прив'язаних до вашого акаунту.
+                                    Безпека цих акаунтів залишається відповідальністю їхніх провайдерів.
+                                </li>
+                                <li>Рекомендуємо використовувати унікальні паролі та включити 2FA (Двофакторну аутентифікацію) для ваших основних облікових записів.</li>
                             </ul>
                         </section>
 
                         <section>
                             <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-mafia-red"></span> 4. Видалення даних
+                                <span className="w-2 h-2 rounded-full bg-mafia-red"></span> 5. Видалення даних
                             </h2>
                             <p>
                                 Ви маєте право вимагати повного видалення вашого акаунту та історії матчів. Для цього зверніться до Адміністрації проекту (Власника) через офіційні канали зв'язку або всередині гри.
                             </p>
+                        </section>
+
+                        <section>
+                            <h2 className="text-xl font-bold text-white mb-3 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-mafia-red"></span> 6. Контакти
+                            </h2>
+                            <p>
+                                З усіх питань щодо конфіденційності, видалення даних або роботи платформи
+                                звертайтесь до адміністрації через Telegram:
+                            </p>
+                            <a
+                                href="https://t.me/hedgehogMSM"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-blue-600/20 border border-blue-500/50 rounded text-blue-400 hover:text-blue-300 hover:bg-blue-600/30 transition-colors font-bold text-sm"
+                            >
+                                📬 @hedgehogMSM
+                            </a>
                         </section>
                     </div>
 

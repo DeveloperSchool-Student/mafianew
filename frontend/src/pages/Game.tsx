@@ -150,6 +150,46 @@ export function Game() {
         };
     }, [user, socket, navigate]);
 
+    // Title Alert for background tabs
+    useEffect(() => {
+        let blinkInterval: number | undefined;
+        let isOriginalTitle = true;
+        const originalTitle = 'Mafia Online';
+
+        const me = gameState.players?.find(p => p.userId === user?.id);
+        const isMyTurn = me?.isAlive && (
+            gameState.phase === 'DAY_VOTING' ||
+            (gameState.phase === 'NIGHT' && gameState.myRole !== 'CITIZEN' && gameState.myRole !== 'JESTER')
+        );
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden' && isMyTurn) {
+                blinkInterval = setInterval(() => {
+                    document.title = isOriginalTitle ? '🔴 Твій хід!' : originalTitle;
+                    isOriginalTitle = !isOriginalTitle;
+                }, 1000);
+            } else {
+                clearInterval(blinkInterval);
+                document.title = originalTitle;
+            }
+        };
+
+        // Run once on phase change if already hidden
+        if (document.visibilityState === 'hidden' && isMyTurn) {
+            handleVisibilityChange();
+        } else {
+            document.title = originalTitle;
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            clearInterval(blinkInterval);
+            document.title = originalTitle;
+        };
+    }, [gameState.phase, gameState.players, user?.id]);
+
 
 
     const submitLastWill = () => {

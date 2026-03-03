@@ -97,10 +97,10 @@ export class UsersController {
   @Post('store/buy')
   async buyFrame(
     @Request() req: { user: { id: string } },
-    @Body() body: { frameId: string, cost: number }
+    @Body() body: { frameId: string }
   ) {
     try {
-      return await this.usersService.buyFrame(req.user.id, body.frameId, body.cost);
+      return await this.usersService.buyFrame(req.user.id, body.frameId);
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }

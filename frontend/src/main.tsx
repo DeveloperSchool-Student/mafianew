@@ -22,6 +22,7 @@ import { MatchReplay } from './pages/MatchReplay.tsx'
 import { Privacy } from './pages/Privacy.tsx'
 import { ForgotPassword } from './pages/ForgotPassword.tsx'
 import { ResetPassword } from './pages/ResetPassword.tsx'
+import { PunishmentGrid } from './pages/PunishmentGrid.tsx'
 
 // @ts-ignore
 import Twemoji from 'react-twemoji'
@@ -65,6 +66,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/punishment-grid" element={<PunishmentGrid />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Twemoji>

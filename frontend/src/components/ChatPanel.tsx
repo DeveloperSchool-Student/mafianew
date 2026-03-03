@@ -44,8 +44,8 @@ export function ChatPanel({
     const isGameOver = gameState.phase === 'END_GAME';
 
     return (
-        <div className="bg-[#111] border border-gray-800 rounded flex flex-col h-[500px]">
-            <div className="p-4 border-b border-gray-800 bg-black/50 flex justify-between items-center">
+        <div className="bg-[#111] border border-gray-800 rounded flex flex-col h-[500px] md:h-[600px] pb-safe">
+            <div className="p-4 border-b border-gray-800 bg-black/50 flex justify-between items-center shrink-0">
                 <div className="flex gap-4">
                     <button
                         onClick={() => setActiveTab('chat')}
@@ -57,7 +57,7 @@ export function ChatPanel({
                     >БЛОКНОТ</button>
                 </div>
 
-                <div className="flex gap-2 text-xs">
+                <div className="flex gap-2 text-xs flex-wrap justify-end">
                     {me?.isAlive && (
                         <button
                             onClick={() => setShowLastWill(!showLastWill)}
@@ -84,7 +84,7 @@ export function ChatPanel({
             </div>
 
             {showLastWill && (
-                <div className="p-4 bg-gray-900 border-b border-gray-700">
+                <div className="p-4 bg-gray-900 border-b border-gray-700 shrink-0">
                     <p className="text-xs text-gray-400 mb-2">Напишіть заповіт, який буде показано всім після вашої смерті:</p>
                     <textarea
                         className="w-full bg-black border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-gray-500 mb-2"
@@ -99,7 +99,7 @@ export function ChatPanel({
                 </div>
             )}
 
-            <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col">
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col min-h-0">
                 {activeTab === 'chat' ? (
                     <div className="flex flex-col gap-2 mt-auto">
                         {gameState.chat?.map(msg => (
@@ -118,7 +118,7 @@ export function ChatPanel({
                     </div>
                 ) : (
                     <textarea
-                        className="w-full h-full bg-transparent text-gray-300 resize-none outline-none text-sm font-mono whitespace-pre-wrap flex-1"
+                        className="w-full h-full bg-transparent text-gray-300 resize-none outline-none text-sm font-mono whitespace-pre-wrap flex-1 min-h-[150px]"
                         placeholder="Ваші приватні нотатки... (зберігаються тільки для вас)"
                         value={notepad}
                         onChange={e => setNotepad(e.target.value)}
@@ -127,13 +127,13 @@ export function ChatPanel({
             </div>
 
             {activeTab === 'chat' && (
-                <form onSubmit={sendChat} className="p-3 border-t border-gray-800 bg-black/50">
+                <form onSubmit={sendChat} className="p-3 border-t border-gray-800 bg-black/50 shrink-0">
                     <input
                         type="text"
                         value={chatInput}
                         onChange={e => setChatInput(e.target.value)}
-                        placeholder={isGameOver ? 'Гра закінчена' : gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат...'}
-                        className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white focus:outline-none focus:border-gray-500 text-sm disabled:opacity-50"
+                        placeholder={isGameOver ? 'Гра закінчена' : gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат (Tap here)'}
+                        className="w-full bg-[#1a1a1a] border border-gray-700 rounded-lg p-3 sm:p-2 text-white focus:outline-none focus:border-gray-500 text-base sm:text-sm disabled:opacity-50"
                         disabled={isGameOver || !me?.isAlive || (gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON')}
                     />
                 </form>

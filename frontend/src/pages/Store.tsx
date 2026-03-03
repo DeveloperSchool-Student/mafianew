@@ -73,7 +73,7 @@ export function Store() {
         if (loadingAction || profile?.wallet?.soft < item.cost) return;
         setLoadingAction(`buy-${item.id}`);
         try {
-            await axios.post(`${API_URL}/users/store/buy`, { frameId: item.id, cost: item.cost }, {
+            await axios.post(`${API_URL}/users/store/buy`, { frameId: item.id }, {
                 headers: { Authorization: `Bearer ${user?.token}` }
             });
             fetchProfile(); // Refresh profile to get updated balance and unlocks
@@ -167,7 +167,7 @@ export function Store() {
                                         <button
                                             onClick={() => handleBuy(item)}
                                             disabled={!canAfford || loadingAction !== null}
-                                            className={`w-full py-3 rounded font-bold transition flex justify-center items-center gap-2 ${canAfford ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                                            className={`w-full py-3 rounded font-bold transition flex justify-center items-center gap-2 ${canAfford ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
                                         >
                                             {loadingAction === `buy-${item.id}` ? '...' : (canAfford ? 'Придбати' : 'Недостатньо монет')}
                                         </button>

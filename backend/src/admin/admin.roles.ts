@@ -35,33 +35,45 @@ export function getStaffPower(staffRoleKey: string | null | undefined): number {
 }
 
 /* ── Мінімальний power для кожної дії ── */
+/* ── Мінімальний power для кожної дії ── */
 export const PERMISSION = {
-    VIEW_REPORTS: 1,  // Стажер+
-    RESOLVE_REPORTS: 2,  // Хелпер+
-    CHAT_MODERATION: 3,  // Модератор+
-    PUNISH: 3,  // Модератор+
-    VIEW_USERS: 3,  // Модератор+
-    ADJUST_GOLD: 6,  // Адміністратор+
-    ADJUST_EXP: 6,  // Адміністратор+
-    CHANGE_NICKNAME: 5,  // Молодший Адміністратор+
-    VIEW_APPEALS: 7,  // Старший Адміністратор+
-    VIEW_LOGS: 7,  // Старший Адміністратор+
-    MANAGE_STAFF: 8,  // Куратор+
-    SET_TITLE: 8,     // Куратор+ (Видача титулів "Лідери")
-    DELETE_USER: 8,  // Куратор+ (повне видалення акаунту)
-    CONFIG: 9,  // Тільки Власник
+    // Вкладки
+    VIEW_GAME_LOGS: 1,  // Стажер (Lv.1+)
+    VIEW_REPORTS: 3,    // Модератор (Lv.3+)
+    RESOLVE_REPORTS: 3, // Модератор (Lv.3+)
+    VIEW_ROOMS: 5,      // Молодший Адміністратор (Lv.5+)
+    VIEW_APPEALS: 5,    // Молодший Адміністратор (Lv.5+ базові), Старший (Lv.7+ складні)
+    RESOLVE_APPEALS: 5, // Молодший Адмін+
+    VIEW_USERS: 6,      // Адміністратор (Lv.6+)
+    VIEW_ADMIN_LOGS: 8, // Куратор (Lv.8+)
+    MANAGE_STAFF: 8,    // Куратор (Lv.8+)
+    EVENTS: 9,          // Власник (Lv.9)
+    CONFIG: 9,          // Власник (Lv.9)
+
+    // Дії над гравцями
+    PUNISH_MUTE: 2,     // Хелпер (Lv.2+)
+    PUNISH_KICK: 3,     // Модератор (Lv.3+)
+    PUNISH_BAN: 4,      // Старший Модератор (Lv.4+)
+    CHAT_MODERATION: 3, // Модератор+
+    PUNISH: 2,          // Базовий рівень для доступу до покарань
+    CHANGE_NICKNAME: 5, // Молодший Адміністратор+
+    ADJUST_GOLD: 9,     // Власник (Фінанси)
+    ADJUST_EXP: 9,      // Власник (Серверна логіка)
+    DELETE_USER: 9,     // Тільки Власник (база даних)
+
+    // Клани і Титули
+    VIEW_CLAN_WARS: 7,  // Старший Адміністратор+
+    RESOLVE_CLAN_WARS: 7, // Старший Адміністратор+
+    SET_TITLE: 7,       // Старший Адміністратор+
 } as const;
 
 /**
  * Максимальна тривалість покарання (в секундах) за рівнем power.
- * Власник (9) та Куратор (8) не мають ліміту (Infinity).
  */
 export function getMaxPunishSeconds(power: number): number {
-    if (power >= 8) return Infinity;    // Куратор+
-    if (power >= 7) return 30 * 86400;  // Старший Адміністратор: до 30 днів
-    if (power >= 6) return 7 * 86400;   // Адміністратор: до 7 днів
-    if (power >= 5) return 3 * 86400;   // Молодший Адміністратор: до 3 днів
-    if (power >= 4) return 1 * 86400;   // Старший Модератор: до 1 дня
-    if (power >= 3) return 6 * 3600;    // Модератор: до 6 годин
-    return 0;
+    if (power >= 6) return Infinity;    // Адміністратор (6) та вище: Пермабан (Infinity)
+    if (power >= 4) return 7 * 86400;   // Старший Модератор (4) - Мл. Адмін (5): до 7 днів
+    if (power >= 3) return 86400;       // Модератор (3): кік або мут до 1 дня
+    if (power >= 2) return 3600;        // Хелпер (2): мут до 1 години
+    return 0;                           // Стажер (1): тільки попередження (0 сек, або без муту)
 }

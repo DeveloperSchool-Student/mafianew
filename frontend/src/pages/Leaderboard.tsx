@@ -104,7 +104,7 @@ export function Leaderboard() {
                                                 className={` border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors
                                                 ${idx === 0 ? 'text-yellow-400 font-bold bg-[#1a1a1a]' : ''}
                                                 ${idx === 1 ? 'text-gray-300 font-bold' : ''}
-                                                ${idx === 2 ? 'text-amber-600 font-bold' : ''}
+                                                ${idx === 2 ? 'text-amber-400 font-bold' : ''}
                                                 `}
                                             >
                                                 <td className="px-6 py-4 flex items-center gap-2">
@@ -147,7 +147,7 @@ export function Leaderboard() {
                                                 className={` border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors
                                                 ${idx === 0 ? 'text-yellow-400 font-bold bg-[#1a1a1a]' : ''}
                                                 ${idx === 1 ? 'text-gray-300 font-bold' : ''}
-                                                ${idx === 2 ? 'text-amber-600 font-bold' : ''}
+                                                ${idx === 2 ? 'text-amber-400 font-bold' : ''}
                                                 `}
                                             >
                                                 <td className="px-6 py-4 flex items-center gap-2">

@@ -212,7 +212,27 @@ export class AdminService {
       reason?: string;
     },
   ) {
+    // Base permission required just to open the punishment panel / access the endpoint
     const power = this.ensureMinPower(requestUser, PERMISSION.PUNISH, 'Покарання');
+
+    // MUTE requires Lv.2 (Helper)
+    if (params.type === 'MUTE') {
+      this.ensureMinPower(requestUser, PERMISSION.PUNISH_MUTE, 'Видача Муту');
+    }
+    // KICK requires Lv.3 (Moderator)
+    if (params.type === 'KICK') {
+      this.ensureMinPower(requestUser, PERMISSION.PUNISH_KICK, 'Викидання з кімнати (Кік)');
+    }
+    // BAN requires Lv.4 (Senior Moderator)
+    if (params.type === 'BAN') {
+      this.ensureMinPower(requestUser, PERMISSION.PUNISH_BAN, 'Видача Бану');
+    }
+
+    // Permanent (durationSeconds null or 0 means infinite) requires Administrator (Lv.6)
+    const isPermanent = !params.durationSeconds || params.durationSeconds <= 0;
+    if (isPermanent && params.type !== 'KICK') {
+      this.ensureMinPower(requestUser, 6, 'Перманентне покарання (назавжди)');
+    }
 
     const target = await this.prisma.user.findUnique({
       where: { username: params.targetUsername },
@@ -228,22 +248,20 @@ export class AdminService {
       );
     }
 
-    // Enforce max duration
-    const maxSec = getMaxPunishSeconds(power);
-    if (
-      params.durationSeconds &&
-      params.durationSeconds > 0 &&
-      params.durationSeconds > maxSec
-    ) {
-      throw new ForbiddenException(
-        `Ваш максимальний термін покарання: ${maxSec} сек.`,
-      );
+    // Enforce max duration limits based on staff level
+    if (!isPermanent) {
+      const maxSec = getMaxPunishSeconds(power);
+      if (params.durationSeconds! > maxSec) {
+        throw new ForbiddenException(
+          `Ваш максимальний термін покарання: ${maxSec} сек.`,
+        );
+      }
     }
 
     const now = new Date();
     let expiresAt: Date | null = null;
-    if (params.durationSeconds && params.durationSeconds > 0) {
-      expiresAt = new Date(now.getTime() + params.durationSeconds * 1000);
+    if (!isPermanent) {
+      expiresAt = new Date(now.getTime() + params.durationSeconds! * 1000);
     }
 
     const scope = params.scope || 'GLOBAL';
@@ -537,7 +555,7 @@ export class AdminService {
   /* ═══════════════════  ACTION LOGS  ═══════════════════ */
 
   async getActionLogs(requestUser: { id: string; staffRoleKey?: string | null }) {
-    this.ensureMinPower(requestUser, PERMISSION.VIEW_LOGS, 'Логи дій');
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_ADMIN_LOGS, 'Логи дій');
     return this.prisma.adminActionLog.findMany({
       include: {
         actor: { select: { username: true } },
@@ -627,7 +645,7 @@ export class AdminService {
   /* ═══════════════════  ACTIVE ROOMS  ═══════════════════ */
 
   async getActiveRooms(requestUser: { id: string; staffRoleKey?: string | null }) {
-    this.ensureMinPower(requestUser, PERMISSION.VIEW_LOGS, 'Перегляд кімнат');
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_ROOMS, 'Перегляд кімнат');
     const redis = this.redisService.getClient();
     const keys = await redis.keys('room:*');
     const rooms = [];
@@ -730,7 +748,7 @@ export class AdminService {
     requestUser: { id: string; staffRoleKey?: string | null },
     status?: string,
   ) {
-    this.ensureMinPower(requestUser, PERMISSION.VIEW_REPORTS, 'Перегляд апеляцій');
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_APPEALS, 'Перегляд апеляцій');
     return this.prisma.appeal.findMany({
       where: status ? { status } : undefined,
       include: {
@@ -745,7 +763,7 @@ export class AdminService {
     requestUser: { id: string; staffRoleKey?: string | null },
     params: { appealId: string; status: 'APPROVED' | 'REJECTED' },
   ) {
-    this.ensureMinPower(requestUser, PERMISSION.RESOLVE_REPORTS, 'Розгляд апеляції');
+    this.ensureMinPower(requestUser, PERMISSION.RESOLVE_APPEALS, 'Розгляд апеляції');
 
     const appeal = await this.prisma.appeal.findUnique({
       where: { id: params.appealId },
@@ -812,16 +830,15 @@ export class AdminService {
 
   async launchEvent(
     requestUser: { id: string; staffRoleKey?: string | null },
-    params: { eventName: string; rewardCoins?: number },
+    params: { eventName: string; rewardCoins?: number; eventRoles?: string[] },
   ) {
-    const power = this.ensureMinPower(requestUser, 9, 'Запуск Івенту'); // Only owner
+    const power = this.ensureMinPower(requestUser, PERMISSION.EVENTS, 'Запуск Івенту'); // Only owner
 
     if (!params.eventName || params.eventName.trim().length < 3) {
       throw new BadRequestException('Назва івенту занадто коротка');
     }
 
-    // 1. Give reward to all currently online users (or all users in DB)? 
-    // Usually Events give rewards to those who login or are online. We'll simply give to ALL users for this feature.
+    // 1. Give reward to all users
     let targetCount = 0;
     if (params.rewardCoins && params.rewardCoins > 0) {
       const result = await this.prisma.wallet.updateMany({
@@ -830,11 +847,28 @@ export class AdminService {
       targetCount = result.count;
     }
 
-    // 2. Broadcast global notification
+    // 2. Store event roles in Redis global config
+    const activatedRoles: string[] = [];
+    const redis = this.redisService.getClient();
+    if (params.eventRoles && params.eventRoles.length > 0) {
+      const validRoles = ['KRAMPUS', 'CUPID', 'SNOWMAN', 'WITCH', 'SANTA', 'GHOST'];
+      const filtered = params.eventRoles.filter(r => validRoles.includes(r));
+      if (filtered.length > 0) {
+        await redis.set('global:eventRoles', JSON.stringify(filtered));
+        await redis.set('global:eventName', params.eventName);
+        activatedRoles.push(...filtered);
+      }
+    }
+
+    // 3. Broadcast global notification
+    const rolesText = activatedRoles.length > 0
+      ? ` Увімкнені спеціальні ролі: ${activatedRoles.join(', ')}!`
+      : '';
+
     this.gameGateway.server.emit('notification', {
       type: 'success',
       title: '🌟 ГЛОБАЛЬНИЙ ІВЕНТ!',
-      message: `Стартував івент «${params.eventName}»! ${params.rewardCoins ? `Усі гравці отримали ${params.rewardCoins} монет!` : ''}`,
+      message: `Стартував івент «${params.eventName}»! ${params.rewardCoins ? `Усі гравці отримали ${params.rewardCoins} монет!` : ''}${rolesText}`,
       duration: 10000
     });
 
@@ -842,20 +876,21 @@ export class AdminService {
       requestUser.id,
       'LAUNCH_EVENT',
       null,
-      `Launched event: ${params.eventName} with ${params.rewardCoins || 0} coins to ${targetCount} users`,
+      `Launched event: ${params.eventName} with ${params.rewardCoins || 0} coins to ${targetCount} users. Event roles: ${activatedRoles.join(', ') || 'none'}`,
     );
 
     return {
       success: true,
       message: 'Івент успішно запущено.',
-      rewardedUsers: targetCount
+      rewardedUsers: targetCount,
+      activatedRoles,
     };
   }
 
   /* ═══════════════════  CLAN WARS  ═══════════════════ */
 
   async listClanWars(requestUser: { id: string; staffRoleKey?: string | null }, status?: string) {
-    this.ensureMinPower(requestUser, 4, 'Перегляд Війн Кланів');
+    this.ensureMinPower(requestUser, PERMISSION.VIEW_CLAN_WARS, 'Перегляд Війн Кланів');
     return this.prisma.clanWar.findMany({
       where: status ? { status } : undefined,
       include: {
@@ -871,7 +906,7 @@ export class AdminService {
     requestUser: { id: string; staffRoleKey?: string | null },
     params: { warId: string; winnerId: string | null },
   ) {
-    this.ensureMinPower(requestUser, 4, 'Вирішення Війн Кланів');
+    this.ensureMinPower(requestUser, PERMISSION.RESOLVE_CLAN_WARS, 'Вирішення Війн Кланів');
 
     const war = await this.prisma.clanWar.findUnique({
       where: { id: params.warId },

@@ -43,6 +43,7 @@ export interface PlayerState {
   isSpectator?: boolean;
   afkPhasesCount?: number;
   isSilenced?: boolean;
+  isOnline?: boolean;
 }
 
 export interface MatchLog {

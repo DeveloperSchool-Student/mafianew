@@ -46,7 +46,45 @@ export class UsersService {
     });
   }
 
-  async buyFrame(userId: string, frameId: string, cost: number) {
+  /** Server-side frame prices — single source of truth */
+  private static readonly FRAME_PRICES: Record<string, number> = {
+    '': 0,
+    'border-gray-300': 100,
+    'border-red-500': 200,
+    'border-blue-500': 200,
+    'border-green-500': 200,
+    'border-yellow-500': 200,
+    'border-purple-500': 200,
+    'border-pink-500': 200,
+    'border-orange-500': 200,
+    'border-cyan-500': 300,
+    'border-teal-500': 300,
+    'border-mafia-red shadow-[0_0_10px_rgba(204,0,0,0.5)]': 1000,
+    'border-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]': 1200,
+    'border-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]': 1200,
+    'border-purple-400 shadow-[0_0_10px_rgba(192,132,252,0.5)]': 1500,
+    'border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]': 1500,
+    'border-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.5)]': 1800,
+    'border-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.5)]': 2000,
+    'border-white shadow-[0_0_10px_rgba(255,255,255,0.8)]': 3000,
+    'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse': 5000,
+    'border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.8)] animate-pulse': 5500,
+    'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.8)] animate-pulse': 6000,
+    'border-fuchsia-500 shadow-[0_0_20px_rgba(217,70,239,0.8)] animate-pulse': 7000,
+    'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.8)] animate-pulse': 8000,
+    'border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.8)] animate-pulse': 9000,
+    'border-transparent bg-gradient-to-r from-red-500 via-yellow-500 to-red-500 !bg-clip-border shadow-[0_0_30px_rgba(239,68,68,1)] animate-spin-slow': 20000,
+    'border-white border-dashed shadow-[0_0_25px_rgba(255,255,255,1)] animate-pulse': 25000,
+    'border-transparent bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 !bg-clip-border shadow-[0_0_30px_rgba(217,70,239,0.9)] animate-bounce': 30000,
+    'border-transparent bg-gradient-to-tr from-yellow-400 via-amber-500 to-yellow-600 !bg-clip-border shadow-[0_0_40px_rgba(251,191,36,1)] animate-pulse': 40000,
+    'border-transparent bg-[conic-gradient(at_center,_var(--tw-gradient-stops))] from-indigo-500 via-purple-500 to-indigo-500 !bg-clip-border shadow-[0_0_50px_rgba(99,102,241,1)] animate-spin': 50000,
+  };
+
+  async buyFrame(userId: string, frameId: string) {
+    const cost = UsersService.FRAME_PRICES[frameId];
+    if (cost === undefined) throw new Error('Невідомий предмет');
+    if (cost === 0) throw new Error('Цей предмет безкоштовний');
+
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
     if (!wallet || wallet.soft < cost) throw new Error('Недостатньо монет');
 

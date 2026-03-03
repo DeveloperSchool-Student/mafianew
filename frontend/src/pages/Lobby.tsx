@@ -67,14 +67,32 @@ export function Lobby() {
         }
 
         const newSocket = io(SOCKET_URL, {
-            auth: { token: user.token }
+            auth: { token: user.token },
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
         });
 
         newSocket.on('connect', () => {
+            setError(null);
             newSocket.emit('check_active_game');
         });
+
+        newSocket.on('disconnect', (reason) => {
+            if (reason === 'io server disconnect' || reason === 'transport close' || reason === 'ping timeout') {
+                setError('Зв\'язок з сервером втрачено. Перепідключення... ⏳');
+            }
+        });
+
+        newSocket.io.on('reconnect', () => {
+            setError(null);
+            newSocket.emit('check_active_game');
+        });
+
         newSocket.on('connect_error', (err) => {
-            setError('Connection error: ' + err.message);
+            setError('Помилка з\'єднання. Перевірте інтернет.');
             if (err.message === 'No token' || err.message === 'Invalid credentials') {
                 logout();
             }
@@ -327,9 +345,9 @@ export function Lobby() {
                                     onChange={e => setInputRoomId(e.target.value)}
                                     placeholder={t('lobby.join_code_placeholder')}
                                     maxLength={6}
-                                    className="w-2/3 bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white text-center font-mono focus:border-white focus:outline-none uppercase text-sm"
+                                    className="flex-1 bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white text-center font-mono focus:border-white focus:outline-none uppercase tracking-[0.3em] text-lg"
                                 />
-                                <button onClick={handleJoin} className="w-1/3 bg-white text-black font-bold py-3 px-2 rounded hover:bg-gray-200 transition-colors uppercase text-sm">
+                                <button onClick={handleJoin} className="px-6 bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition-colors uppercase text-sm">
                                     {t('lobby.join')}
                                 </button>
                             </div>
@@ -560,13 +578,20 @@ export function Lobby() {
                                 </button>
 
                                 {isHost && (
-                                    <button
-                                        onClick={handleStart}
-                                        disabled={!allReady}
-                                        className="flex-1 bg-mafia-red hover:bg-red-700 disabled:bg-red-900/30 disabled:text-gray-500 text-white font-bold py-2 sm:py-3 px-3 sm:px-4 rounded transition-colors flex justify-center items-center gap-1 sm:gap-2 text-sm"
-                                    >
-                                        <Play size={18} /> {t('lobby.start')}
-                                    </button>
+                                    <div className="flex-1 relative group">
+                                        <button
+                                            onClick={handleStart}
+                                            disabled={!allReady}
+                                            className="w-full bg-mafia-red hover:bg-red-700 disabled:bg-red-900/30 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-2 sm:py-3 px-3 sm:px-4 rounded transition-colors flex justify-center items-center gap-1 sm:gap-2 text-sm"
+                                        >
+                                            <Play size={18} /> {t('lobby.start')}
+                                        </button>
+                                        {!allReady && (
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-black border border-gray-700 text-gray-300 text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                Потрібно мін. 4 гравців і всі мають бути готові
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>

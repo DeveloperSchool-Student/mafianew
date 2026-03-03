@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoleType } from './game.types';
 import { SkipThrottle } from '@nestjs/throttler';
+import { sanitize } from '../utils/sanitize';
 
 @SkipThrottle()
 @WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN || '*' } })
@@ -22,6 +23,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Track one active socket per userId to prevent multi-tab conflicts
   private userSockets: Map<string, string> = new Map();
+
+  // Rate limiting for room creation: userId -> timestamps[]
+  private roomCreationTimestamps: Map<string, number[]> = new Map();
 
   constructor(
     private readonly gameService: GameService,
@@ -89,7 +93,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (activeGameRoomId) {
       // Clear any disconnect timer since user is back
-      await this.gameService.handlePlayerReconnect(activeGameRoomId, userId);
+      await this.gameService.handlePlayerReconnect(activeGameRoomId, userId, (roomId, event, payload) => {
+        if (event === 'game_state_update') {
+          this.broadcastGameState(roomId);
+        } else {
+          this.server.to(roomId).emit(event, payload);
+        }
+      });
 
       client.join(activeGameRoomId);
       const filteredState = await this.gameService.getFilteredStateForUser(
@@ -116,6 +126,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('create_room')
   async handleCreateRoom(@ConnectedSocket() client: Socket) {
     const user = client.data.user;
+
+    // Rate limit: max 3 rooms per minute per user
+    const now = Date.now();
+    const timestamps = this.roomCreationTimestamps.get(user.sub) || [];
+    const recent = timestamps.filter(t => now - t < 60000);
+    if (recent.length >= 3) {
+      client.emit('error', 'Занадто багато кімнат. Спробуйте через хвилину.');
+      return;
+    }
+    recent.push(now);
+    this.roomCreationTimestamps.set(user.sub, recent);
+
     const roomId = await this.gameService.createRoom(user.sub, user.username);
     client.join(roomId);
     const room = await this.gameService.getRoom(roomId);
@@ -307,7 +329,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!state) return;
     const player = state.players.find((p) => p.userId === client.data.user.sub);
     if (player && player.isAlive) {
-      player.lastWill = data.lastWill.substring(0, 150); // limit length
+      player.lastWill = sanitize(data.lastWill, 150);
       await this.gameService.saveGameState(state);
       client.emit('system_chat', 'Заповіт збережено.');
     }
@@ -332,6 +354,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { roomId: string; targetId: string; message: string },
     @ConnectedSocket() client: Socket,
   ) {
+    data.message = sanitize(data.message, 200);
+    if (!data.message) return;
     const success = await this.gameService.handleWhisper(
       data.roomId,
       client.data.user.sub,
@@ -392,6 +416,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     if (!data || !data.roomId || !data.message) return;
+    data.message = sanitize(data.message, 500);
     const state = await this.gameService.getGameState(data.roomId);
     const username = client.data?.user?.username || 'Unknown';
     const sub = client.data?.user?.sub;

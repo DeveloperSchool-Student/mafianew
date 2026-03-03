@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GameGateway } from '../game/game.gateway';
+import { sanitize } from '../utils/sanitize';
 
 @Injectable()
 export class PmService {
@@ -67,6 +68,10 @@ export class PmService {
 
     async sendMessage(userId: string, targetId: string, content: string) {
         if (!content || !content.trim()) throw new BadRequestException('Повідомлення не може бути порожнім');
+
+        // Sanitize content (strip HTML tags)
+        content = sanitize(content, 1000);
+        if (!content) throw new BadRequestException('Повідомлення не може бути порожнім');
 
         // Check mute
         const profile = await this.prisma.profile.findUnique({ where: { userId } });
