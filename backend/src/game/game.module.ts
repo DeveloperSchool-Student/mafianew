@@ -19,5 +19,6 @@ import { RedisModule } from '../redis/redis.module';
     }),
   ],
   providers: [GameGateway, GameService],
+  exports: [GameGateway],
 })
 export class GameModule { }
