@@ -14,7 +14,7 @@ import { RedisModule } from './redis/redis.module';
 import { MatchesModule } from './matches/matches.module';
 import { MailModule } from './mail/mail.module';
 import { RewardModule } from './reward/reward.module';
-import { TradeController } from './trade/trade.controller';
+import { TradeModule } from './trade/trade.module';
 
 @Module({
   imports: [
@@ -34,8 +34,9 @@ import { TradeController } from './trade/trade.controller';
     MatchesModule,
     MailModule,
     RewardModule,
+    TradeModule,
   ],
-  controllers: [AppController, TradeController],
+  controllers: [AppController],
   providers: [
     AppService,
     // Apply rate limiting globally
