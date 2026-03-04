@@ -15,6 +15,7 @@ import { MatchesModule } from './matches/matches.module';
 import { MailModule } from './mail/mail.module';
 import { RewardModule } from './reward/reward.module';
 import { TradeModule } from './trade/trade.module';
+import { TournamentModule } from './tournament/tournament.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { TradeModule } from './trade/trade.module';
     MailModule,
     RewardModule,
     TradeModule,
+    TournamentModule,
   ],
   controllers: [AppController],
   providers: [

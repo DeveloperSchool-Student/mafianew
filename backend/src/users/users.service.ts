@@ -255,19 +255,26 @@ export class UsersService {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile?.clanId) return [];
 
+    // Auto-check for expired wars
+    await this.checkAndEndExpiredWars();
+
     return this.prisma.clanWar.findMany({
       where: {
         OR: [
           { challengerId: profile.clanId },
           { targetId: profile.clanId }
         ],
-        status: { in: ['PENDING', 'ACTIVE'] }
       },
       include: {
-        challenger: { select: { name: true } },
-        target: { select: { name: true } }
+        challenger: { select: { name: true, rating: true } },
+        target: { select: { name: true, rating: true } },
+        contributions: {
+          orderBy: { points: 'desc' },
+          take: 10,
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     });
   }
 
@@ -321,8 +328,125 @@ export class UsersService {
 
     return this.prisma.clanWar.update({
       where: { id: warId },
-      data: { status: 'ACTIVE' }
+      data: {
+        status: 'ACTIVE',
+        startedAt: new Date(),
+        durationHours: 48,
+      }
     });
+  }
+
+  /**
+   * Add points to a clan in an active war.
+   * Called after a game completes to credit the winning player's clan.
+   */
+  async addWarPoints(userId: string, clanId: string, points: number, source: string) {
+    // Find an active war involving this clan
+    const war = await this.prisma.clanWar.findFirst({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { challengerId: clanId },
+          { targetId: clanId },
+        ],
+      },
+    });
+    if (!war) return null;
+
+    // Record contribution
+    await this.prisma.clanWarContribution.create({
+      data: {
+        warId: war.id,
+        userId,
+        clanId,
+        points,
+        source,
+      },
+    });
+
+    // Update live score
+    const isChallenger = war.challengerId === clanId;
+    await this.prisma.clanWar.update({
+      where: { id: war.id },
+      data: isChallenger
+        ? { challengerScore: { increment: points } }
+        : { targetScore: { increment: points } },
+    });
+
+    return war;
+  }
+
+  /**
+   * Check for expired active wars and resolve them.
+   */
+  async checkAndEndExpiredWars() {
+    const activeWars = await this.prisma.clanWar.findMany({
+      where: { status: 'ACTIVE' },
+    });
+
+    const now = new Date();
+    for (const war of activeWars) {
+      if (!war.startedAt) continue;
+      const endTime = new Date(war.startedAt.getTime() + war.durationHours * 3600 * 1000);
+      if (now >= endTime) {
+        await this.endClanWar(war.id);
+      }
+    }
+  }
+
+  /**
+   * End a clan war and determine winner.
+   */
+  async endClanWar(warId: string) {
+    const war = await this.prisma.clanWar.findUnique({ where: { id: warId } });
+    if (!war || war.status !== 'ACTIVE') return null;
+
+    let winnerId: string | null = null;
+    let ratingChange = 50 + Math.floor(war.customBet / 10); // Base rating change
+
+    if (war.challengerScore > war.targetScore) {
+      winnerId = war.challengerId;
+    } else if (war.targetScore > war.challengerScore) {
+      winnerId = war.targetId;
+    }
+    // null = draw
+
+    // Update war
+    await this.prisma.clanWar.update({
+      where: { id: warId },
+      data: {
+        status: 'FINISHED',
+        winnerId,
+        ratingChange,
+        endedAt: new Date(),
+      },
+    });
+
+    // Update clan ratings
+    if (winnerId) {
+      const loserId = winnerId === war.challengerId ? war.targetId : war.challengerId;
+      await this.prisma.clan.update({
+        where: { id: winnerId },
+        data: { rating: { increment: ratingChange } },
+      });
+      await this.prisma.clan.update({
+        where: { id: loserId },
+        data: { rating: { decrement: Math.floor(ratingChange / 2) } },
+      });
+
+      // Distribute custom bet reward to winner clan leader
+      if (war.customBet > 0) {
+        const winnerClan = await this.prisma.clan.findUnique({ where: { id: winnerId } });
+        if (winnerClan) {
+          await this.prisma.wallet.update({
+            where: { userId: winnerClan.ownerId },
+            data: { soft: { increment: war.customBet * 2 } },
+          });
+        }
+      }
+    }
+
+    return { winnerId, ratingChange };
   }
 
   async rejectClanWar(userId: string, warId: string) {

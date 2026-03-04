@@ -36,6 +36,37 @@ export class UsersController {
     });
   }
 
+  @UseGuards(AuthGuard('jwt'))
+  @Get('profile/:id')
+  async getPublicProfile(@Param('id') userId: string) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        staffRoleKey: true,
+        staffRole: true,
+        createdAt: true,
+        profile: {
+          select: {
+            matches: true, wins: true, losses: true,
+            avatarUrl: true, xp: true, level: true,
+            activeFrame: true, title: true, mmr: true,
+            clanId: true, clanRole: true,
+            clan: { select: { id: true, name: true } },
+            matchHistory: {
+              include: { match: true },
+              orderBy: { match: { createdAt: 'desc' } },
+              take: 10
+            }
+          }
+        },
+      },
+    });
+    if (!target) throw new BadRequestException('Користувача не знайдено');
+    return target;
+  }
+
   @Get('leaderboard')
   async getLeaderboard() {
     return this.usersService.getLeaderboard();

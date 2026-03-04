@@ -297,6 +297,24 @@ export class AdminService {
       `${params.type} ${params.durationSeconds || 'permanent'}s scope=${scope} reason=${params.reason || '—'}`,
     );
 
+    // Real-time notification to the punished player
+    try {
+      const targetSocketId = (this.gameGateway as any).userSockets?.get(target.id);
+      if (targetSocketId) {
+        this.gameGateway.server.to(targetSocketId).emit('punishment_notification', {
+          type: params.type,
+          reason: params.reason || 'Порушення правил',
+          durationSeconds: params.durationSeconds || null,
+          expiresAt: expiresAt?.toISOString() || null,
+          message: params.type === 'BAN'
+            ? `Ваш акаунт заблоковано${expiresAt ? ' до ' + expiresAt.toLocaleString('uk-UA') : ' назавжди'}. Причина: ${params.reason || '—'}. Ви можете подати апеляцію у профілі.`
+            : params.type === 'MUTE'
+              ? `Вам заборонено писати в чат${expiresAt ? ' до ' + expiresAt.toLocaleString('uk-UA') : ' назавжди'}. Причина: ${params.reason || '—'}.`
+              : `Вас викинуто з кімнати. Причина: ${params.reason || '—'}.`,
+        });
+      }
+    } catch { }
+
     return { success: true };
   }
 
@@ -542,12 +560,25 @@ export class AdminService {
       `Report ${params.reportId} → ${params.status}: ${params.note || '—'}`,
     );
 
-    // Emit notification to reporter
-    this.gameGateway.server.to(report.reporterId).emit('notification', {
-      type: params.status === 'RESOLVED' ? 'success' : 'info',
-      title: 'Скаргу розглянуто',
-      message: `Ваша скарга на користувача була розглянута адміністратором. Статус: ${params.status}.`
-    });
+    // Notify reporter and target about report resolution
+    try {
+      const reporterSocketId = (this.gameGateway as any).userSockets?.get(report.reporterId);
+      if (reporterSocketId) {
+        this.gameGateway.server.to(reporterSocketId).emit('report_resolved', {
+          type: params.status === 'RESOLVED' ? 'success' : 'info',
+          message: `Вашу скаргу було ${params.status === 'RESOLVED' ? 'розглянуто та вирішено' : 'відхилено'} адміністратором.${params.note ? ' Коментар: ' + params.note : ''}`,
+        });
+      }
+      if (params.status === 'RESOLVED' && report.targetId) {
+        const targetSocketId = (this.gameGateway as any).userSockets?.get(report.targetId);
+        if (targetSocketId) {
+          this.gameGateway.server.to(targetSocketId).emit('report_resolved', {
+            type: 'warning',
+            message: `На вас було подано скаргу, яку адміністратор визнав обґрунтованою. Будь ласка, дотримуйтесь правил.`,
+          });
+        }
+      }
+    } catch { }
 
     return { success: true };
   }
@@ -564,6 +595,33 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
+  }
+
+  async clearLogs(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { olderThanDays?: number },
+  ) {
+    this.ensureMinPower(requestUser, PERMISSION.CONFIG, 'Очищення логів');
+
+    const where: any = {};
+    if (params.olderThanDays && params.olderThanDays > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - params.olderThanDays);
+      where.createdAt = { lt: cutoff };
+    }
+
+    const result = await this.prisma.adminActionLog.deleteMany({ where });
+
+    await this.logAction(
+      requestUser.id,
+      'CLEAR_LOGS',
+      null,
+      params.olderThanDays
+        ? `Видалено ${result.count} логів старших за ${params.olderThanDays} днів`
+        : `Видалено всі логи (${result.count} записів)`,
+    );
+
+    return { deleted: result.count };
   }
 
   /* ═══════════════════  MY REPORTS  ═══════════════════ */

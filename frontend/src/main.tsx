@@ -23,6 +23,7 @@ import { Privacy } from './pages/Privacy.tsx'
 import { ForgotPassword } from './pages/ForgotPassword.tsx'
 import { ResetPassword } from './pages/ResetPassword.tsx'
 import { PunishmentGrid } from './pages/PunishmentGrid.tsx'
+import { Tournaments } from './pages/Tournaments.tsx'
 
 // @ts-ignore
 import Twemoji from 'react-twemoji'
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/lobby" element={<Lobby />} />
           <Route path="/game" element={<Game />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:id" element={<Profile />} />
           <Route path="/leaderboard" element={<Leaderboard />} /> {/* Added route for Leaderboard */}
           <Route path="/store" element={<Store />} />
           <Route path="/clans" element={<Clans />} />
@@ -67,6 +69,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/punishment-grid" element={<PunishmentGrid />} />
+          <Route path="/tournaments" element={<Tournaments />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Twemoji>

@@ -567,6 +567,45 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('spectate_room')
+  async handleSpectateRoom(
+    @MessageBody('roomId') roomId: string,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const user = client.data.user;
+
+    // Check that user has a staff role
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { staffRoleKey: true },
+    });
+    if (!dbUser?.staffRoleKey) {
+      client.emit('error', 'Тільки адміністратори можуть спостерігати.');
+      return;
+    }
+
+    const room = await this.gameService.getRoom(roomId);
+    if (!room) {
+      client.emit('error', 'Кімнату не знайдено.');
+      return;
+    }
+
+    // Cannot spectate before the game starts
+    if (room.status !== 'IN_PROGRESS') {
+      client.emit('error', 'Неможливо переглядати кімнату до початку гри.');
+      return;
+    }
+
+    // Join as spectator using existing joinRoom logic (handles IN_PROGRESS spectator join)
+    await this.gameService.joinRoom(roomId, user.sub, user.username);
+    client.join(roomId);
+
+    // Send game state
+    const filteredState = await this.gameService.getFilteredStateForUser(roomId, user.sub);
+    client.emit('game_state_update', filteredState);
+    client.emit('room_joined', room);
+  }
+
   /* ═══════════════════  ONLINE MATCHMAKING  ═══════════════════ */
   private onlineQueue: Map<string, { userId: string; username: string; socketId: string }> = new Map();
   private readonly MIN_PLAYERS_ONLINE = 5;

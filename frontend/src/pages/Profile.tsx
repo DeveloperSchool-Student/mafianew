@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Trophy, Hash, Edit2, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +32,8 @@ export function Profile() {
     const { user, logout } = useAppStore();
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { id: routeUserId } = useParams<{ id?: string }>();
+    const isOwnProfile = !routeUserId || routeUserId === user?.id;
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [newAvatarUrl, setNewAvatarUrl] = useState('');
@@ -66,18 +68,31 @@ export function Profile() {
             return;
         }
 
-        axios.get(`${API_URL}/users/me`, {
-            headers: { Authorization: `Bearer ${user.token}` }
-        })
-            .then(res => setProfile(res.data))
-            .catch(err => console.error(err));
+        if (isOwnProfile) {
+            // Own profile — load full data
+            axios.get(`${API_URL}/users/me`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            })
+                .then(res => setProfile(res.data))
+                .catch(err => console.error(err));
 
-        axios.get(`${API_URL}/users/quests`, {
-            headers: { Authorization: `Bearer ${user.token}` }
-        })
-            .then(res => setQuests(res.data))
-            .catch(err => console.error(err));
-    }, [user, navigate]);
+            axios.get(`${API_URL}/users/quests`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            })
+                .then(res => setQuests(res.data))
+                .catch(err => console.error(err));
+        } else {
+            // Other player's profile — load public read-only data
+            axios.get(`${API_URL}/users/profile/${routeUserId}`, {
+                headers: { Authorization: `Bearer ${user.token}` }
+            })
+                .then(res => setProfile(res.data))
+                .catch(err => {
+                    console.error(err);
+                    navigate('/lobby');
+                });
+        }
+    }, [user, navigate, routeUserId, isOwnProfile]);
 
     const claimQuest = async (questId: string) => {
         try {
@@ -201,7 +216,8 @@ export function Profile() {
     return (
         <div className="min-h-screen bg-mafia-dark text-mafia-light p-2 sm:p-4 flex flex-col items-center">
             <div className="w-full max-w-2xl mt-4 sm:mt-8">
-                <button onClick={() => navigate('/lobby')} className="mb-4 text-mafia-red hover:underline text-sm">{t('common.back_to_lobby')}</button>
+                <button onClick={() => navigate(-1)} className="mb-4 text-mafia-red hover:underline text-sm">← {isOwnProfile ? t('common.back_to_lobby') : 'Назад'}</button>
+                {!isOwnProfile && <p className="text-xs text-gray-500 mb-2">👁️ Ви переглядаєте профіль іншого гравця (тільки для читання)</p>}
 
                 <div className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-4 sm:p-8 shadow-2xl">
                     <div className="flex items-center gap-4 sm:gap-6 mb-8 border-b border-gray-800 pb-6">
@@ -213,13 +229,15 @@ export function Profile() {
                                     profile.username.charAt(0).toUpperCase()
                                 )}
                             </div>
-                            <button
-                                onClick={() => setIsEditingAvatar(!isEditingAvatar)}
-                                className="absolute bottom-0 right-0 bg-gray-800 p-1.5 sm:p-2 rounded-full border border-gray-600 hover:bg-gray-700 transition"
-                                title={t('profile.edit_avatar')}
-                            >
-                                <Edit2 size={12} className="text-white sm:w-[14px] sm:h-[14px]" />
-                            </button>
+                            {isOwnProfile && (
+                                <button
+                                    onClick={() => setIsEditingAvatar(!isEditingAvatar)}
+                                    className="absolute bottom-0 right-0 bg-gray-800 p-1.5 sm:p-2 rounded-full border border-gray-600 hover:bg-gray-700 transition"
+                                    title={t('profile.edit_avatar')}
+                                >
+                                    <Edit2 size={12} className="text-white sm:w-[14px] sm:h-[14px]" />
+                                </button>
+                            )}
                         </div>
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
@@ -250,7 +268,7 @@ export function Profile() {
                         </div>
                     </div>
 
-                    {isEditingAvatar && (
+                    {isOwnProfile && isEditingAvatar && (
                         <form onSubmit={handleAvatarSubmit} className="mb-6 bg-[#111] p-4 rounded border border-gray-800">
                             <label className="block text-sm text-gray-400 mb-2">{t('profile.avatar_url')}</label>
                             <div className="flex gap-2">
@@ -268,8 +286,8 @@ export function Profile() {
                         </form>
                     )}
 
-                    {/* Punishments & Appeals Section */}
-                    {(profile.profile?.bannedUntil || profile.profile?.mutedUntil) && (
+                    {/* Punishments & Appeals Section — own profile only */}
+                    {isOwnProfile && (profile.profile?.bannedUntil || profile.profile?.mutedUntil) && (
                         <div className="mb-8">
                             <h3 className="text-sm font-bold text-red-500 mb-4 tracking-widest uppercase border-t border-gray-800 pt-8">Обмеження Акаунта</h3>
 
@@ -335,76 +353,101 @@ export function Profile() {
                         </div>
                     )}
 
-                    <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase border-t border-gray-800 pt-8">Безпека Акаунта</h3>
-                    <div className="bg-[#111] p-4 rounded border border-gray-800 mb-8">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <p className="text-sm text-gray-400 mb-1">Електронна пошта</p>
-                                {profile.email ? (
-                                    <p className="text-white font-bold">{profile.email}</p>
-                                ) : (
-                                    <p className="text-red-500 font-bold text-sm">Не прив'язана (Рекомендується)</p>
-                                )}
-                            </div>
-                            {!profile.email && !bindEmailMode && (
-                                <button
-                                    onClick={() => setBindEmailMode(true)}
-                                    className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap"
-                                >
-                                    Прив'язати пошту
-                                </button>
-                            )}
-                        </div>
-
-                        {bindEmailMode && (
-                            <form onSubmit={handleBindEmail} className="mt-4 pt-4 border-t border-gray-800">
-                                {bindEmailError && <div className="bg-red-900/50 border border-red-500 text-red-100 p-2 text-xs rounded mb-3">{bindEmailError}</div>}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="email"
-                                        required
-                                        value={newEmail}
-                                        onChange={e => setNewEmail(e.target.value)}
-                                        placeholder="Введіть ваш email"
-                                        className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red"
-                                    />
-                                    <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
-                                        Зберегти
-                                    </button>
-                                    <button type="button" onClick={() => { setBindEmailMode(false); setBindEmailError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
-                                        Скасувати
-                                    </button>
+                    {isOwnProfile && <>
+                        <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase border-t border-gray-800 pt-8">Безпека Акаунта</h3>
+                        <div className="bg-[#111] p-4 rounded border border-gray-800 mb-8">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-1">Електронна пошта</p>
+                                    {profile.email ? (
+                                        <p className="text-white font-bold">{profile.email}</p>
+                                    ) : (
+                                        <p className="text-red-500 font-bold text-sm">Не прив'язана (Рекомендується)</p>
+                                    )}
                                 </div>
-                            </form>
-                        )}
-                        {bindEmailSuccess && <div className="mt-3 text-green-500 text-sm font-bold">{bindEmailSuccess}</div>}
-
-                        <hr className="border-gray-800 my-4" />
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
-                                <p className="text-sm text-gray-400 mb-1">Двофакторна автентифікація (2FA)</p>
-                                {profile.isTwoFactorEnabled ? (
-                                    <p className="text-green-500 font-bold">Увімкнено</p>
-                                ) : (
-                                    <p className="text-red-500 font-bold text-sm">Вимкнено (Рекомендується)</p>
+                                {!profile.email && !bindEmailMode && (
+                                    <button
+                                        onClick={() => setBindEmailMode(true)}
+                                        className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap"
+                                    >
+                                        Прив'язати пошту
+                                    </button>
                                 )}
                             </div>
-                            {!twoFactorMode && (
-                                <button
-                                    onClick={() => profile.isTwoFactorEnabled ? setTwoFactorMode(true) : startTwoFactorSetup()}
-                                    className={`${profile.isTwoFactorEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-mafia-red hover:bg-red-700'} text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap`}
-                                >
-                                    {profile.isTwoFactorEnabled ? 'Вимкнути 2FA' : 'Увімкнути 2FA'}
-                                </button>
-                            )}
-                        </div>
 
-                        {twoFactorMode && !profile.isTwoFactorEnabled && (
-                            <div className="mt-4 pt-4 border-t border-gray-800">
-                                <p className="text-sm text-gray-400 mb-2">Відскануйте цей QR-код у додатку Google Authenticator або Authy:</p>
-                                {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="2FA QR Code" className="mb-4 bg-white p-2 rounded w-40 h-40" />}
-                                <form onSubmit={confirmTwoFactorSetup}>
+                            {bindEmailMode && (
+                                <form onSubmit={handleBindEmail} className="mt-4 pt-4 border-t border-gray-800">
+                                    {bindEmailError && <div className="bg-red-900/50 border border-red-500 text-red-100 p-2 text-xs rounded mb-3">{bindEmailError}</div>}
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="email"
+                                            required
+                                            value={newEmail}
+                                            onChange={e => setNewEmail(e.target.value)}
+                                            placeholder="Введіть ваш email"
+                                            className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red"
+                                        />
+                                        <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                            Зберегти
+                                        </button>
+                                        <button type="button" onClick={() => { setBindEmailMode(false); setBindEmailError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                            Скасувати
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                            {bindEmailSuccess && <div className="mt-3 text-green-500 text-sm font-bold">{bindEmailSuccess}</div>}
+
+                            <hr className="border-gray-800 my-4" />
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-1">Двофакторна автентифікація (2FA)</p>
+                                    {profile.isTwoFactorEnabled ? (
+                                        <p className="text-green-500 font-bold">Увімкнено</p>
+                                    ) : (
+                                        <p className="text-red-500 font-bold text-sm">Вимкнено (Рекомендується)</p>
+                                    )}
+                                </div>
+                                {!twoFactorMode && (
+                                    <button
+                                        onClick={() => profile.isTwoFactorEnabled ? setTwoFactorMode(true) : startTwoFactorSetup()}
+                                        className={`${profile.isTwoFactorEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-mafia-red hover:bg-red-700'} text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap`}
+                                    >
+                                        {profile.isTwoFactorEnabled ? 'Вимкнути 2FA' : 'Увімкнути 2FA'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {twoFactorMode && !profile.isTwoFactorEnabled && (
+                                <div className="mt-4 pt-4 border-t border-gray-800">
+                                    <p className="text-sm text-gray-400 mb-2">Відскануйте цей QR-код у додатку Google Authenticator або Authy:</p>
+                                    {qrCodeDataUrl && <img src={qrCodeDataUrl} alt="2FA QR Code" className="mb-4 bg-white p-2 rounded w-40 h-40" />}
+                                    <form onSubmit={confirmTwoFactorSetup}>
+                                        {twoFactorError && <div className="bg-red-900/50 border border-red-500 text-red-100 p-2 text-xs rounded mb-3">{twoFactorError}</div>}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                required
+                                                value={twoFactorToken}
+                                                onChange={e => setTwoFactorToken(e.target.value)}
+                                                placeholder="Код з додатка (6 цифр)"
+                                                className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red tracking-widest"
+                                            />
+                                            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                                Підтвердити
+                                            </button>
+                                            <button type="button" onClick={() => { setTwoFactorMode(false); setTwoFactorError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                                Скасувати
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+
+                            {twoFactorMode && profile.isTwoFactorEnabled && (
+                                <form onSubmit={disableTwoFactor} className="mt-4 pt-4 border-t border-gray-800">
+                                    <p className="text-sm text-gray-400 mb-3">Щоб вимкнути 2FA, введіть поточний код з додатка:</p>
                                     {twoFactorError && <div className="bg-red-900/50 border border-red-500 text-red-100 p-2 text-xs rounded mb-3">{twoFactorError}</div>}
                                     <div className="flex gap-2">
                                         <input
@@ -415,105 +458,84 @@ export function Profile() {
                                             placeholder="Код з додатка (6 цифр)"
                                             className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red tracking-widest"
                                         />
-                                        <button type="submit" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold text-sm transition">
-                                            Підтвердити
+                                        <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                            Вимкнути
                                         </button>
                                         <button type="button" onClick={() => { setTwoFactorMode(false); setTwoFactorError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
                                             Скасувати
                                         </button>
                                     </div>
                                 </form>
-                            </div>
-                        )}
+                            )}
+                            {twoFactorSuccess && <div className="mt-3 text-green-500 text-sm font-bold">{twoFactorSuccess}</div>}
 
-                        {twoFactorMode && profile.isTwoFactorEnabled && (
-                            <form onSubmit={disableTwoFactor} className="mt-4 pt-4 border-t border-gray-800">
-                                <p className="text-sm text-gray-400 mb-3">Щоб вимкнути 2FA, введіть поточний код з додатка:</p>
-                                {twoFactorError && <div className="bg-red-900/50 border border-red-500 text-red-100 p-2 text-xs rounded mb-3">{twoFactorError}</div>}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        required
-                                        value={twoFactorToken}
-                                        onChange={e => setTwoFactorToken(e.target.value)}
-                                        placeholder="Код з додатка (6 цифр)"
-                                        className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red tracking-widest"
-                                    />
-                                    <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
-                                        Вимкнути
-                                    </button>
-                                    <button type="button" onClick={() => { setTwoFactorMode(false); setTwoFactorError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
-                                        Скасувати
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-                        {twoFactorSuccess && <div className="mt-3 text-green-500 text-sm font-bold">{twoFactorSuccess}</div>}
+                            <hr className="border-gray-800 my-4" />
 
-                        <hr className="border-gray-800 my-4" />
-
-                        <div className="flex flex-col gap-2">
-                            <p className="text-sm text-gray-400 mb-1">Налаштування звуку</p>
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => {
-                                        audioManager.toggleMute();
-                                        setIsMuted(audioManager.isAudioMuted());
-                                    }}
-                                    className="text-gray-400 hover:text-white transition"
-                                >
-                                    {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-                                </button>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.05"
-                                    value={volume}
-                                    onChange={(e) => {
-                                        const newVol = parseFloat(e.target.value);
-                                        audioManager.setVolume(newVol);
-                                        setVolume(newVol);
-                                        if (isMuted && newVol > 0) {
+                            <div className="flex flex-col gap-2">
+                                <p className="text-sm text-gray-400 mb-1">Налаштування звуку</p>
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={() => {
                                             audioManager.toggleMute();
-                                            setIsMuted(false);
-                                        }
-                                    }}
-                                    className="flex-1 accent-mafia-red bg-gray-700 h-2 rounded-lg appearance-none cursor-pointer"
-                                />
-                                <span className="text-xs text-gray-500 w-8">{Math.round(volume * 100)}%</span>
+                                            setIsMuted(audioManager.isAudioMuted());
+                                        }}
+                                        className="text-gray-400 hover:text-white transition"
+                                    >
+                                        {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                                    </button>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={volume}
+                                        onChange={(e) => {
+                                            const newVol = parseFloat(e.target.value);
+                                            audioManager.setVolume(newVol);
+                                            setVolume(newVol);
+                                            if (isMuted && newVol > 0) {
+                                                audioManager.toggleMute();
+                                                setIsMuted(false);
+                                            }
+                                        }}
+                                        className="flex-1 accent-mafia-red bg-gray-700 h-2 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                    <span className="text-xs text-gray-500 w-8">{Math.round(volume * 100)}%</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </>}
 
-                    <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase">{t('profile.daily_quests')}</h3>
-                    <div className="space-y-3 mb-8">
-                        {quests.map(q => (
-                            <div key={q.id} className="bg-[#111] border border-gray-800 rounded p-3 sm:p-4 flex items-center justify-between gap-3">
-                                <div className="min-w-0">
-                                    <p className="font-bold text-white mb-1 text-sm truncate">{q.title}</p>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-24 sm:w-32 bg-gray-800 rounded-full h-1.5">
-                                            <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (q.progress / q.target) * 100)}%` }}></div>
+                    {isOwnProfile && <>
+                        <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase">{t('profile.daily_quests')}</h3>
+                        <div className="space-y-3 mb-8">
+                            {quests.map(q => (
+                                <div key={q.id} className="bg-[#111] border border-gray-800 rounded p-3 sm:p-4 flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-white mb-1 text-sm truncate">{q.title}</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-24 sm:w-32 bg-gray-800 rounded-full h-1.5">
+                                                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, (q.progress / q.target) * 100)}%` }}></div>
+                                            </div>
+                                            <span className="text-xs text-gray-500">{q.progress} / {q.target}</span>
                                         </div>
-                                        <span className="text-xs text-gray-500">{q.progress} / {q.target}</span>
+                                    </div>
+                                    <div className="flex-shrink-0">
+                                        {q.claimed ? (
+                                            <span className="text-green-500 font-bold text-xs sm:text-sm">{t('profile.completed')}</span>
+                                        ) : q.progress >= q.target ? (
+                                            <button onClick={() => claimQuest(q.id)} className="bg-yellow-600 hover:bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-bold transition whitespace-nowrap">
+                                                {t('profile.claim', { reward: q.reward })} <CoinIcon size={14} />
+                                            </button>
+                                        ) : (
+                                            <span className="text-gray-500 text-xs sm:text-sm font-bold whitespace-nowrap">{t('profile.reward', { reward: q.reward })} <CoinIcon size={14} /></span>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="flex-shrink-0">
-                                    {q.claimed ? (
-                                        <span className="text-green-500 font-bold text-xs sm:text-sm">{t('profile.completed')}</span>
-                                    ) : q.progress >= q.target ? (
-                                        <button onClick={() => claimQuest(q.id)} className="bg-yellow-600 hover:bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-bold transition whitespace-nowrap">
-                                            {t('profile.claim', { reward: q.reward })} <CoinIcon size={14} />
-                                        </button>
-                                    ) : (
-                                        <span className="text-gray-500 text-xs sm:text-sm font-bold whitespace-nowrap">{t('profile.reward', { reward: q.reward })} <CoinIcon size={14} /></span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                        {quests.length === 0 && <p className="text-gray-500 text-sm pb-4">{t('profile.no_quests')}</p>}
-                    </div>
+                            ))}
+                            {quests.length === 0 && <p className="text-gray-500 text-sm pb-4">{t('profile.no_quests')}</p>}
+                        </div>
+                    </>}
 
                     <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase border-t border-gray-800 pt-8">{t('profile.finances')}</h3>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
@@ -549,12 +571,20 @@ export function Profile() {
                     </div>
 
                     <div className="flex gap-3 sm:gap-4 mt-8 pt-6 border-t border-gray-800">
-                        <button onClick={logout} className="flex-1 bg-mafia-gray hover:bg-gray-800 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 rounded transition-colors border border-gray-700 text-sm">
-                            {t('profile.logout')}
-                        </button>
-                        <button onClick={() => navigate('/lobby')} className="flex-2 bg-mafia-red hover:bg-red-700 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 rounded transition-colors text-sm">
-                            {t('common.play')}
-                        </button>
+                        {isOwnProfile ? (
+                            <>
+                                <button onClick={logout} className="flex-1 bg-mafia-gray hover:bg-gray-800 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 rounded transition-colors border border-gray-700 text-sm">
+                                    {t('profile.logout')}
+                                </button>
+                                <button onClick={() => navigate('/lobby')} className="flex-2 bg-mafia-red hover:bg-red-700 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 rounded transition-colors text-sm">
+                                    {t('common.play')}
+                                </button>
+                            </>
+                        ) : (
+                            <button onClick={() => navigate(-1)} className="flex-1 bg-mafia-red hover:bg-red-700 text-white font-bold py-2.5 sm:py-3 px-3 sm:px-4 rounded transition-colors text-sm">
+                                ← Назад
+                            </button>
+                        )}
                     </div>
 
                     {profile.profile?.matchHistory && profile.profile.matchHistory.length > 0 && (

@@ -177,6 +177,14 @@ export class AdminController {
     return this.adminService.getActionLogs(req.user);
   }
 
+  @Post('logs/clear')
+  clearLogs(
+    @Request() req: any,
+    @Body() body: { olderThanDays?: number },
+  ) {
+    return this.adminService.clearLogs(req.user, body);
+  }
+
   /* ── Staff Roles seed (call once on setup) ── */
 
   @Post('seed-roles')

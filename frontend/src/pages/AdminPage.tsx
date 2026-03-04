@@ -118,7 +118,7 @@ export function AdminPage() {
                     {tab === 'staff' && <StaffTab token={user.token} myPower={myPower} />}
                     {tab === 'rooms' && <RoomsTab token={user.token} />}
                     {tab === 'leaders' && <LeadersTab token={user.token} />}
-                    {tab === 'logs' && <LogsTab token={user.token} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
+                    {tab === 'logs' && <LogsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'duties' && <DutiesTab />}
                     {tab === 'events' && <EventsTab token={user.token} />}
                 </main>
@@ -613,25 +613,59 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
 /* ═══════════════════════════════════════════════════════════
    LOGS TAB
    ═══════════════════════════════════════════════════════════ */
-function LogsTab({ token, onUserAction }: { token: string; onUserAction: (username: string) => void }) {
+function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [clearDays, setClearDays] = useState<number | 'all'>(7);
     const { t } = useTranslation();
 
-    useEffect(() => {
-        (async () => {
-            setLoading(true);
-            try {
-                const res = await axios.get(`${API_URL}/admin/logs`, headers(token));
-                setLogs(res.data);
-            } catch { }
-            setLoading(false);
-        })();
-    }, []);
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/logs`, headers(token));
+            setLogs(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const handleClearLogs = async () => {
+        const label = clearDays === 'all' ? 'ВСІ логи' : `логи старші за ${clearDays} днів`;
+        if (!confirm(`Ви впевнені? Буде видалено ${label}. Цю дію неможливо скасувати.`)) return;
+        try {
+            const body: any = {};
+            if (clearDays !== 'all') body.olderThanDays = clearDays;
+            const res = await axios.post(`${API_URL}/admin/logs/clear`, body, headers(token));
+            alert(`✅ Видалено ${res.data.deleted} записів`);
+            load();
+        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+    };
 
     return (
         <div>
-            <h2 className="text-xl sm:text-2xl font-bold mb-6">📜 {t('admin.logs')}</h2>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold">📜 {t('admin.logs')}</h2>
+                {myPower >= 9 && (
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={String(clearDays)}
+                            onChange={e => setClearDays(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                            className="bg-[#1a1a1a] border border-gray-700 rounded px-2 py-1.5 text-white text-xs"
+                        >
+                            <option value="7">Старші 7 днів</option>
+                            <option value="30">Старші 30 днів</option>
+                            <option value="all">Всі логи</option>
+                        </select>
+                        <button
+                            onClick={handleClearLogs}
+                            className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-3 py-1.5 rounded transition flex items-center gap-1"
+                        >
+                            <Trash2 size={12} /> Очистити
+                        </button>
+                    </div>
+                )}
+            </div>
             {loading ? <p className="text-gray-500">{t('common.loading')}</p> : logs.length === 0 ? <p className="text-gray-500">{t('admin.no_logs')}</p> : (
                 <div className="space-y-2">
                     {logs.map(l => (
@@ -815,9 +849,13 @@ function RoomsTab({ token }: { token: string }) {
 
     useEffect(() => { load(); }, []);
 
-    const spectate = (roomId: string) => {
+    const spectate = (roomId: string, status: string) => {
         if (!socket) return;
-        socket.emit('join_room', { roomId });
+        if (status !== 'IN_PROGRESS') {
+            alert('Неможливо переглядати кімнату до початку гри.');
+            return;
+        }
+        socket.emit('spectate_room', { roomId });
         navigate('/game');
     };
 
@@ -840,8 +878,14 @@ function RoomsTab({ token }: { token: string }) {
                                     </>
                                 )}
                             </div>
-                            <button onClick={() => spectate(r.id)} className="mt-4 bg-blue-900/50 hover:bg-blue-700 text-blue-300 font-bold py-2 px-4 rounded transition w-full flex items-center justify-center gap-2">
-                                <Eye size={16} /> Спостерігати
+                            <button
+                                onClick={() => spectate(r.id, r.status)}
+                                disabled={r.status !== 'IN_PROGRESS'}
+                                className={`mt-4 font-bold py-2 px-4 rounded transition w-full flex items-center justify-center gap-2 ${r.status === 'IN_PROGRESS'
+                                    ? 'bg-blue-900/50 hover:bg-blue-700 text-blue-300'
+                                    : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                <Eye size={16} /> {r.status === 'IN_PROGRESS' ? 'Спостерігати' : 'Очікування старту...'}
                             </button>
                         </div>
                     ))}

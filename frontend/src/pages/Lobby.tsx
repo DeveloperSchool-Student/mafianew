@@ -156,6 +156,18 @@ export function Lobby() {
             });
         });
 
+        newSocket.on('punishment_notification', (data: any) => {
+            const emoji = data.type === 'BAN' ? '🚫' : data.type === 'MUTE' ? '🔇' : '👢';
+            alert(`${emoji} ${data.message}\n\nЯкщо ви вважаєте це помилкою — подайте апеляцію у профілі.`);
+            if (data.type === 'BAN') {
+                navigate('/profile');
+            }
+        });
+
+        newSocket.on('report_resolved', (data: any) => {
+            alert(`📋 ${data.message || 'Вашу скаргу було розглянуто адміністратором.'}`);
+        });
+
         setSocket(newSocket);
 
         // NOTE: Do NOT disconnect on cleanup — socket is shared with Game page.
@@ -210,6 +222,7 @@ export function Lobby() {
         { label: <><Trophy size={16} /> {t('lobby.leaderboard')}</>, path: '/leaderboard', color: 'yellow' },
         { label: `📜 ${t('lobby.history')}`, path: '/history', color: 'green' },
         { label: `🤝 Обмін`, path: '/trades', color: 'teal' },
+        { label: `🏆 Турніри`, path: '/tournaments', color: 'amber' },
     ];
 
     return (

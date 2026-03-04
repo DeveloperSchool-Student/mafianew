@@ -308,37 +308,105 @@ export function Clans() {
                 {myClanId && wars.length > 0 && (
                     <div className="mt-8 bg-[#1a1a1a] rounded-xl border border-gray-800 p-6">
                         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                            <Swords className="text-red-500" /> Активні Війни
+                            <Swords className="text-red-500" /> Кланові Війни
                         </h3>
-                        <div className="space-y-3">
-                            {wars.map(w => {
-                                const isChallenger = w.clan1Id === myClanId;
-                                const enemyName = isChallenger ? w.clan2.name : w.clan1.name;
+                        <div className="space-y-4">
+                            {wars.map((w: any) => {
+                                const isChallenger = w.challengerId === myClanId;
+                                const myTeamName = isChallenger ? w.challenger?.name : w.target?.name;
+                                const enemyName = isChallenger ? w.target?.name : w.challenger?.name;
+                                const myScore = isChallenger ? w.challengerScore : w.targetScore;
+                                const enemyScore = isChallenger ? w.targetScore : w.challengerScore;
+                                const totalScore = myScore + enemyScore || 1;
+                                const myPercent = Math.round((myScore / totalScore) * 100);
                                 const canAccept = !isChallenger && w.status === 'PENDING' && canManageWars;
 
+                                // Time left for active wars
+                                let timeLeft = '';
+                                if (w.status === 'ACTIVE' && w.startedAt) {
+                                    const endMs = new Date(w.startedAt).getTime() + (w.durationHours || 48) * 3600 * 1000;
+                                    const leftMs = endMs - Date.now();
+                                    if (leftMs > 0) {
+                                        const hours = Math.floor(leftMs / 3600000);
+                                        const mins = Math.floor((leftMs % 3600000) / 60000);
+                                        timeLeft = `${hours}г ${mins}хв`;
+                                    } else {
+                                        timeLeft = 'Завершується...';
+                                    }
+                                }
+
+                                const isFinished = w.status === 'FINISHED';
+                                const didWin = isFinished && w.winnerId === myClanId;
+                                const isDraw = isFinished && !w.winnerId;
+
                                 return (
-                                    <div key={w.id} className="bg-[#111] p-4 rounded border border-gray-800 flex justify-between items-center">
-                                        <div>
-                                            <p className="text-white font-bold text-lg mb-1">
-                                                {isChallenger ? 'Ви кинули виклик' : 'Вам кинули виклик'} <span className="text-red-500">{enemyName}</span>
-                                            </p>
-                                            <div className="flex gap-4 text-sm text-gray-400">
-                                                <span>Статус: <b className={w.status === 'ACTIVE' ? 'text-green-500' : 'text-yellow-500'}>{w.status}</b></span>
-                                                <span className="flex items-center gap-1">Ставка: <b className="text-yellow-500">{w.customBet}</b> <CoinIcon size={12} /></span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2 text-sm">
-                                            {w.status === 'PENDING' && canManageWars && (
-                                                <>
-                                                    {canAccept && (
-                                                        <button onClick={() => handleWarAction(w.id, 'accept')} className="bg-green-600/20 hover:bg-green-600 border border-green-500/50 text-green-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
-                                                            <Check size={16} /> Прийняти
-                                                        </button>
+                                    <div key={w.id} className={`bg-[#111] rounded-lg border overflow-hidden ${isFinished ? (didWin ? 'border-green-800' : isDraw ? 'border-gray-700' : 'border-red-900')
+                                            : w.status === 'ACTIVE' ? 'border-orange-900/50' : 'border-gray-800'
+                                        }`}>
+                                        <div className="p-4">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <p className="text-white font-bold text-lg">
+                                                        {isChallenger ? 'Ви кинули виклик' : 'Вам кинули виклик'} <span className="text-red-500">{enemyName}</span>
+                                                    </p>
+                                                    <div className="flex gap-4 text-sm text-gray-400 mt-1">
+                                                        <span>Статус: <b className={
+                                                            w.status === 'ACTIVE' ? 'text-green-400' :
+                                                                w.status === 'FINISHED' ? 'text-gray-400' :
+                                                                    'text-yellow-500'
+                                                        }>{w.status === 'ACTIVE' ? 'Активна' : w.status === 'FINISHED' ? 'Завершена' : 'Очікує'}</b></span>
+                                                        <span className="flex items-center gap-1">Ставка: <b className="text-yellow-500">{w.customBet}</b> <CoinIcon size={12} /></span>
+                                                        {timeLeft && <span>⏰ {timeLeft}</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 text-sm">
+                                                    {w.status === 'PENDING' && canManageWars && (
+                                                        <>
+                                                            {canAccept && (
+                                                                <button onClick={() => handleWarAction(w.id, 'accept')} className="bg-green-600/20 hover:bg-green-600 border border-green-500/50 text-green-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
+                                                                    <Check size={16} /> Прийняти
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => handleWarAction(w.id, 'reject')} className="bg-red-600/20 hover:bg-red-600 border border-red-500/50 text-red-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
+                                                                <X size={16} /> {isChallenger ? 'Скасувати' : 'Відхилити'}
+                                                            </button>
+                                                        </>
                                                     )}
-                                                    <button onClick={() => handleWarAction(w.id, 'reject')} className="bg-red-600/20 hover:bg-red-600 border border-red-500/50 text-red-500 hover:text-white py-1.5 px-3 rounded transition flex items-center gap-1 font-bold">
-                                                        <X size={16} /> {isChallenger ? 'Скасувати' : 'Відхилити'}
-                                                    </button>
-                                                </>
+                                                </div>
+                                            </div>
+
+                                            {/* Live Scoreboard */}
+                                            {(w.status === 'ACTIVE' || isFinished) && (
+                                                <div className="mt-3">
+                                                    <div className="flex justify-between items-center text-sm mb-1">
+                                                        <span className="text-blue-400 font-bold">{myTeamName} <span className="text-lg">{myScore}</span></span>
+                                                        <span className="text-gray-500 text-xs">VS</span>
+                                                        <span className="text-red-400 font-bold"><span className="text-lg">{enemyScore}</span> {enemyName}</span>
+                                                    </div>
+                                                    <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden flex">
+                                                        <div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${myPercent}%` }} />
+                                                        <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${100 - myPercent}%` }} />
+                                                    </div>
+                                                    {isFinished && (
+                                                        <p className={`text-center mt-2 font-bold text-sm ${didWin ? 'text-green-400' : isDraw ? 'text-gray-400' : 'text-red-400'}`}>
+                                                            {didWin ? `🏆 Перемога! +${w.ratingChange} рейтингу` : isDraw ? '🤝 Нічия' : `❌ Поразка. -${Math.floor(w.ratingChange / 2)} рейтингу`}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Top Contributors */}
+                                            {w.contributions && w.contributions.length > 0 && (w.status === 'ACTIVE' || isFinished) && (
+                                                <div className="mt-3 pt-3 border-t border-gray-800">
+                                                    <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider font-bold">Топ внесок</p>
+                                                    <div className="flex gap-2 flex-wrap text-xs">
+                                                        {w.contributions.slice(0, 5).map((c: any, i: number) => (
+                                                            <span key={c.id} className="bg-[#1a1a1a] border border-gray-700 px-2 py-1 rounded text-gray-300">
+                                                                #{i + 1} <span className="text-white font-medium">{c.userId.slice(0, 6)}...</span> +{c.points}pts
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

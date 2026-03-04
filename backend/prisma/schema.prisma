@@ -288,15 +288,63 @@ model Trade {
 
 /// Кланові Війни
 model ClanWar {
-  id            String   @id @default(uuid())
-  challengerId  String
-  challenger    Clan     @relation("ChallengerClan", fields: [challengerId], references: [id])
-  targetId      String
-  target        Clan     @relation("TargetClan", fields: [targetId], references: [id])
-  status        String   @default("PENDING") // PENDING | ACTIVE | FINISHED | REJECTED
-  winnerId      String?  // null if draw or not finished
-  ratingChange  Int      @default(0) // How much rating the winner gained/loser lost
-  customBet     Int      @default(0)
-  createdAt     DateTime @default(now())
-  endedAt       DateTime?
+  id              String   @id @default(uuid())
+  challengerId    String
+  challenger      Clan     @relation("ChallengerClan", fields: [challengerId], references: [id])
+  targetId        String
+  target          Clan     @relation("TargetClan", fields: [targetId], references: [id])
+  status          String   @default("PENDING") // PENDING | ACTIVE | FINISHED | REJECTED
+  winnerId        String?  // null if draw or not finished
+  ratingChange    Int      @default(0)
+  customBet       Int      @default(0)
+  challengerScore Int      @default(0)
+  targetScore     Int      @default(0)
+  durationHours   Int      @default(48)
+  startedAt       DateTime?
+  createdAt       DateTime @default(now())
+  endedAt         DateTime?
+  contributions   ClanWarContribution[]
 }
+
+/// Внесок гравця у кланову війну
+model ClanWarContribution {
+  id        String   @id @default(uuid())
+  warId     String
+  war       ClanWar  @relation(fields: [warId], references: [id])
+  userId    String
+  clanId    String
+  points    Int      @default(0)
+  source    String   // GAME_WIN | DIRECT_CLASH | CLAN_CLASH
+  createdAt DateTime @default(now())
+}
+
+/// Турнір
+model Tournament {
+  id              String   @id @default(uuid())
+  name            String
+  status          String   @default("REGISTRATION") // REGISTRATION | ACTIVE | FINISHED | CANCELLED
+  maxParticipants Int      @default(16)
+  prizePool       Int      @default(0)
+  entryFee        Int      @default(0)
+  createdById     String
+  rules           String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime @default(now())
+  participants    TournamentParticipant[]
+}
+
+/// Учасник турніру
+model TournamentParticipant {
+  id            String     @id @default(uuid())
+  tournamentId  String
+  tournament    Tournament @relation(fields: [tournamentId], references: [id])
+  userId        String
+  username      String
+  status        String     @default("REGISTERED") // REGISTERED | ACTIVE | ELIMINATED | WINNER
+  placement     Int?
+  wins          Int        @default(0)
+  losses        Int        @default(0)
+  joinedAt      DateTime   @default(now())
+}
+

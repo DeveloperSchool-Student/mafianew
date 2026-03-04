@@ -1078,6 +1078,42 @@ export class GameService implements OnModuleInit {
                                 }
                             }
                         }
+
+                        // Clan War integration: winning players earn points for their clan
+                        if (won && profile.clanId) {
+                            try {
+                                const activeWar = await this.prisma.clanWar.findFirst({
+                                    where: {
+                                        status: 'ACTIVE',
+                                        OR: [
+                                            { challengerId: profile.clanId },
+                                            { targetId: profile.clanId },
+                                        ],
+                                    },
+                                });
+                                if (activeWar) {
+                                    const warPoints = 10;
+                                    await this.prisma.clanWarContribution.create({
+                                        data: {
+                                            warId: activeWar.id,
+                                            userId: p.userId,
+                                            clanId: profile.clanId,
+                                            points: warPoints,
+                                            source: 'GAME_WIN',
+                                        },
+                                    });
+                                    const isChallenger = activeWar.challengerId === profile.clanId;
+                                    await this.prisma.clanWar.update({
+                                        where: { id: activeWar.id },
+                                        data: isChallenger
+                                            ? { challengerScore: { increment: warPoints } }
+                                            : { targetScore: { increment: warPoints } },
+                                    });
+                                }
+                            } catch (warErr) {
+                                console.error('Clan war points error', warErr);
+                            }
+                        }
                     }
                 } catch (e) {
                     console.error('Failed to update stats', e);
