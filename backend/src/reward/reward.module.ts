@@ -4,9 +4,9 @@ import { RewardService } from './reward.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [RewardController],
-    providers: [RewardService],
-    exports: [RewardService],
+  imports: [PrismaModule],
+  controllers: [RewardController],
+  providers: [RewardService],
+  exports: [RewardService],
 })
-export class RewardModule { }
+export class RewardModule {}

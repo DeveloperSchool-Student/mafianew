@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Trophy, Users, ArrowLeft, Plus, Play, X, Award, Swords } from 'lucide-react';
+import { Trophy, Users, ArrowLeft, Plus, Play, X, Award } from 'lucide-react';
 import { CoinIcon } from '../components/CoinIcon';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -52,7 +52,7 @@ export function Tournaments() {
     const [entryFee, setEntryFee] = useState(0);
     const [rules, setRules] = useState('');
 
-    const myPower = user?.staffRoleKey ? 6 : 0; // Simplified power check
+
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }

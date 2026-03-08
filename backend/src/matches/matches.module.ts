@@ -3,7 +3,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { MatchesController } from './matches.controller';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [MatchesController],
+  imports: [PrismaModule],
+  controllers: [MatchesController],
 })
-export class MatchesModule { }
+export class MatchesModule {}

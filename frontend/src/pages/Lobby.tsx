@@ -1,18 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../store';
+import { useNotificationStore } from '../store/notificationStore';
 import { useNavigate, Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { LogOut, Users, Play, Plus, Trophy, Settings, Globe, Menu, X } from 'lucide-react';
+import { LogOut, Users, Play, Plus, Trophy, Settings, Globe, Menu, X, Bell, Trash2, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { ReportModal } from '../components/ReportModal';
 import { DailyRewardModal } from '../components/DailyRewardModal';
 import { LobbyChat } from '../components/LobbyChat';
 
+const formatTimeAgo = (timestamp: number) => {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'щойно';
+    if (minutes < 60) return `${minutes}хв тому`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}год тому`;
+    return `${Math.floor(hours / 24)}д тому`;
+};
+
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function Lobby() {
     const { user, logout, socket, setSocket, gameState, setGameState } = useAppStore();
+    const { addNotification, history, markAsRead, markAllAsRead, clearHistory } = useNotificationStore();
     const navigate = useNavigate();
     const { t } = useTranslation();
     const [inputRoomId, setInputRoomId] = useState('');
@@ -21,10 +33,25 @@ export function Lobby() {
     const [showSettings, setShowSettings] = useState(false);
     const [isReportOpen, setIsReportOpen] = useState(false);
     const [isRewardOpen, setIsRewardOpen] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [createRoomType, setCreateRoomType] = useState<'CASUAL' | 'RANKED'>('CASUAL');
     const [recentPlayers, setRecentPlayers] = useState<string[]>([]);
     const [incomingInvite, setIncomingInvite] = useState<{ roomId: string, inviterUsername: string } | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+    const notificationsRef = useRef<HTMLDivElement>(null);
+
+    // Close notifications on outside click
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+                setShowNotifications(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const [onlineQueueInfo, setOnlineQueueInfo] = useState<{ inQueue: number, timer: number | null, minPlayers: number, maxPlayers: number }>({
         inQueue: 0,
         timer: null,
@@ -117,7 +144,7 @@ export function Lobby() {
         });
 
         newSocket.on('room_updated', (room) => {
-            setGameState({ roomId: room.id, hostId: room.hostId, players: room.players, settings: room.settings });
+            setGameState({ roomId: room.id, hostId: room.hostId, type: room.type, players: room.players, settings: room.settings });
             setLocalSettings(room.settings || { dayTimerMs: 60000, nightTimerMs: 30000, enableSerialKiller: true, enableEscort: true, enableJester: true });
             if (room.status === 'IN_PROGRESS' && window.location.pathname !== '/game') {
                 navigate('/game');
@@ -125,7 +152,7 @@ export function Lobby() {
         });
 
         newSocket.on('room_joined', (room) => {
-            setGameState({ roomId: room.id, hostId: room.hostId, players: room.players, settings: room.settings });
+            setGameState({ roomId: room.id, hostId: room.hostId, type: room.type, players: room.players, settings: room.settings });
             setLocalSettings(room.settings || { dayTimerMs: 60000, nightTimerMs: 30000, enableSerialKiller: true, enableEscort: true, enableJester: true });
             if (room.status === 'IN_PROGRESS' && window.location.pathname !== '/game') {
                 navigate('/game');
@@ -157,15 +184,35 @@ export function Lobby() {
         });
 
         newSocket.on('punishment_notification', (data: any) => {
-            const emoji = data.type === 'BAN' ? '🚫' : data.type === 'MUTE' ? '🔇' : '👢';
-            alert(`${emoji} ${data.message}\n\nЯкщо ви вважаєте це помилкою — подайте апеляцію у профілі.`);
+            addNotification({
+                type: data.type === 'BAN' ? 'error' : data.type === 'WARN' ? 'warning' : 'info',
+                title: 'Покарання',
+                message: `${data.message}\n\nЯкщо ви вважаєте це помилкою — подайте апеляцію у профілі.`,
+                duration: 10000,
+            });
             if (data.type === 'BAN') {
                 navigate('/profile');
             }
         });
 
+        newSocket.on('staff_role_changed', (data: any) => {
+            addNotification({
+                type: 'info',
+                title: 'Зміна ролі',
+                message: data.message,
+                duration: 8000
+            });
+            // Refresh user data to get updated role
+            useAppStore.getState().fetchCurrentUser();
+        });
+
         newSocket.on('report_resolved', (data: any) => {
-            alert(`📋 ${data.message || 'Вашу скаргу було розглянуто адміністратором.'}`);
+            addNotification({
+                type: 'success',
+                title: 'Оновлення скарги',
+                message: data.message || 'Вашу скаргу було розглянуто адміністратором.',
+                duration: 6000
+            });
         });
 
         setSocket(newSocket);
@@ -174,7 +221,7 @@ export function Lobby() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, navigate]);
 
-    const handleCreate = () => socket?.emit('create_room');
+    const handleCreate = () => socket?.emit('create_room', { type: createRoomType });
     const handleJoin = () => {
         if (!inputRoomId) return;
         socket?.emit('join_room', { roomId: inputRoomId.toUpperCase() });
@@ -267,10 +314,63 @@ export function Lobby() {
                         </button>
                     ))}
 
+                    <div className="relative" ref={notificationsRef}>
+                        <button
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            className="relative text-gray-400 hover:text-white transition-colors p-1.5 bg-gray-900 border border-gray-700 rounded-full ml-2"
+                        >
+                            <Bell size={18} />
+                            {history.filter(n => !n.read).length > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                                    {history.filter(n => !n.read).length}
+                                </span>
+                            )}
+                        </button>
+
+                        {showNotifications && (
+                            <div className="absolute right-0 top-10 w-80 bg-[#161616] border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden">
+                                <div className="p-3 border-b border-gray-800 bg-[#111] flex justify-between items-center">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <Bell size={14} /> Нотифікації
+                                    </h3>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => markAllAsRead()} title="Прочитати все" className="text-gray-400 hover:text-blue-400">
+                                            <CheckCircle2 size={16} />
+                                        </button>
+                                        <button onClick={() => clearHistory()} title="Очистити історію" className="text-gray-400 hover:text-red-400">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="max-h-80 overflow-y-auto">
+                                    {history.length > 0 ? history.map(notif => (
+                                        <div
+                                            key={notif.id}
+                                            onClick={() => markAsRead(notif.id)}
+                                            className={`p-3 border-b border-gray-800 hover:bg-[#1a1a1a] cursor-pointer transition ${notif.read ? 'opacity-60' : 'bg-gray-900/30'}`}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className={`text-xs font-bold ${notif.type === 'error' ? 'text-red-400' :
+                                                    notif.type === 'success' ? 'text-green-400' :
+                                                        notif.type === 'warning' ? 'text-yellow-400' :
+                                                            'text-blue-400'
+                                                    }`}>{notif.title}</h4>
+                                                <span className="text-[10px] text-gray-500">{formatTimeAgo(notif.timestamp)}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-300 whitespace-pre-wrap">{notif.message}</p>
+                                        </div>
+                                    )) : (
+                                        <div className="p-4 text-center text-gray-500 text-xs">Немає нових нотифікацій</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {user?.staffRoleKey && (
                         <button
                             onClick={() => navigate('/admin')}
-                            className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-500 text-white px-2 py-1 rounded transition-colors uppercase"
+                            className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-500 text-white px-2 py-1 rounded transition-colors uppercase ml-2"
                         >
                             {t('lobby.admin_panel')}
                         </button>
@@ -293,6 +393,60 @@ export function Lobby() {
                 {/* Mobile menu toggle */}
                 <div className="flex lg:hidden items-center gap-2">
                     <LanguageSwitcher />
+
+                    <div className="relative" ref={notificationsRef}>
+                        <button
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            className="relative text-gray-400 hover:text-white transition-colors p-1.5 bg-gray-900 border border-gray-700 rounded-full"
+                        >
+                            <Bell size={18} />
+                            {history.filter(n => !n.read).length > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                                    {history.filter(n => !n.read).length}
+                                </span>
+                            )}
+                        </button>
+
+                        {showNotifications && (
+                            <div className="absolute right-0 top-10 w-[85vw] max-w-sm bg-[#161616] border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden text-left">
+                                <div className="p-3 border-b border-gray-800 bg-[#111] flex justify-between items-center">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <Bell size={14} /> Нотифікації
+                                    </h3>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => markAllAsRead()} title="Прочитати все" className="text-gray-400 hover:text-blue-400">
+                                            <CheckCircle2 size={16} />
+                                        </button>
+                                        <button onClick={() => clearHistory()} title="Очистити історію" className="text-gray-400 hover:text-red-400">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="max-h-80 overflow-y-auto">
+                                    {history.length > 0 ? history.map(notif => (
+                                        <div
+                                            key={notif.id}
+                                            onClick={() => markAsRead(notif.id)}
+                                            className={`p-3 border-b border-gray-800 hover:bg-[#1a1a1a] cursor-pointer transition ${notif.read ? 'opacity-60' : 'bg-gray-900/30'}`}
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className={`text-xs font-bold ${notif.type === 'error' ? 'text-red-400' :
+                                                    notif.type === 'success' ? 'text-green-400' :
+                                                        notif.type === 'warning' ? 'text-yellow-400' :
+                                                            'text-blue-400'
+                                                    }`}>{notif.title}</h4>
+                                                <span className="text-[10px] text-gray-500 whitespace-nowrap ml-2">{formatTimeAgo(notif.timestamp)}</span>
+                                            </div>
+                                            <p className="text-xs text-gray-300 whitespace-pre-wrap">{notif.message}</p>
+                                        </div>
+                                    )) : (
+                                        <div className="p-4 text-center text-gray-500 text-xs">Немає нових нотифікацій</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {user?.staffRoleKey && (
                         <button
                             onClick={() => navigate('/admin')}
@@ -341,6 +495,16 @@ export function Lobby() {
                             <Plus size={40} className="text-mafia-red mb-3 sm:mb-4" />
                             <h3 className="text-lg sm:text-xl font-bold mb-2">{t('lobby.create_room')}</h3>
                             <p className="text-gray-500 text-xs sm:text-sm mb-4 sm:mb-6">{t('lobby.create_room_desc')}</p>
+
+                            <select
+                                value={createRoomType}
+                                onChange={e => setCreateRoomType(e.target.value as any)}
+                                className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white mb-3 text-sm focus:border-gray-500 outline-none"
+                            >
+                                <option value="CASUAL">🟢 CASUAL (Без MMR)</option>
+                                <option value="RANKED">🔴 RANKED (±25 MMR)</option>
+                            </select>
+
                             <button onClick={handleCreate} className="w-full bg-mafia-red hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition-all shadow-[0_0_10px_rgba(204,0,0,0.3)] uppercase text-sm">
                                 {t('lobby.create_room')}
                             </button>
@@ -409,12 +573,21 @@ export function Lobby() {
                 ) : (
                     /* Inside Room */
                     <div className="bg-mafia-gray rounded-xl border border-gray-800 overflow-hidden shadow-2xl">
-                        <div className="bg-[#1a1a1a] p-4 sm:p-6 border-b border-gray-800 flex justify-between items-center">
+                        <div className="bg-[#1a1a1a] p-4 sm:p-6 border-b border-gray-800 flex justify-between items-center relative overflow-hidden">
+                            {/* Room Type Badge */}
+                            {gameState.type && (
+                                <div className={`absolute top-0 left-1/2 -translate-x-1/2 text-[10px] sm:text-xs px-4 py-0.5 font-bold rounded-b-md shadow-sm border-x border-b ${gameState.type === 'RANKED'
+                                    ? 'bg-red-900/80 text-red-200 border-red-700/50 shadow-[0_0_10px_rgba(204,0,0,0.3)]'
+                                    : 'bg-green-900/80 text-green-200 border-green-700/50'
+                                    }`}>
+                                    {gameState.type}
+                                </div>
+                            )}
                             <div>
-                                <p className="text-xs sm:text-sm text-gray-500 font-medium">{t('lobby.room')}</p>
+                                <p className="text-xs sm:text-sm text-gray-500 font-medium mt-3 sm:mt-1">{t('lobby.room')}</p>
                                 <h2 className="text-2xl sm:text-3xl font-mono font-bold tracking-widest text-white">{gameState.roomId}</h2>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right mt-3 sm:mt-1">
                                 <p className="text-xs sm:text-sm text-gray-500 font-medium">{t('lobby.players_count')}</p>
                                 <p className="text-lg sm:text-xl font-bold">{gameState.players.length} / 20</p>
                             </div>

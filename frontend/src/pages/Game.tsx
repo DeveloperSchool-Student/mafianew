@@ -8,6 +8,7 @@ import { ChatPanel } from '../components/ChatPanel';
 import { PlayerGrid } from '../components/PlayerGrid';
 import { BettingPanel } from '../components/BettingPanel';
 import { audioManager } from '../utils/audio';
+import { WinAnimation } from '../components/WinAnimation';
 
 export function Game() {
     const { user, gameState, socket, soundSettings, updateSoundSettings } = useAppStore();
@@ -19,6 +20,7 @@ export function Game() {
     const [showSoundSettings, setShowSoundSettings] = useState(false);
     const [showPhaseOverlay, setShowPhaseOverlay] = useState(false);
     const [overlayPhase, setOverlayPhase] = useState<string | null>(null);
+    const [mobileTab, setMobileTab] = useState<'players' | 'chat' | 'bets'>('players');
 
 
 
@@ -235,6 +237,16 @@ export function Game() {
     const me = gameState.players?.find(p => p.userId === user?.id);
     const isGameOver = gameState.phase === 'END_GAME';
 
+    // Parse winner from chat
+    let winner = null;
+    if (isGameOver) {
+        const winMsg = gameState.chat.find((m: any) => m.type === 'system' && m.text.includes('ПЕРЕМОГА:'));
+        if (winMsg) {
+            const match = winMsg.text.match(/ПЕРЕМОГА: (СЕРІЙНИЙ ВБИВЦЯ|МАФІЯ|МИРНІ|БЛАЗЕНЬ|МАНІЯК)/);
+            if (match) winner = match[1];
+        }
+    }
+
     if (!gameState.roomId) {
         return <div className="p-8 text-center bg-mafia-dark text-white min-h-screen">Loading Game...</div>;
     }
@@ -246,6 +258,7 @@ export function Game() {
             case 'NIGHT': return t('game.phase_NIGHT');
             case 'DAY_DISCUSSION': return t('game.phase_DAY_DISCUSSION');
             case 'DAY_VOTING': return t('game.phase_DAY_VOTING');
+            case 'MAYOR_VETO': return t('game.phase_MAYOR_VETO', 'ВЕТО МЕРА');
             case 'END_GAME': return t('game.phase_END_GAME');
             default: return phase || t('game.unknown');
         }
@@ -293,6 +306,9 @@ export function Game() {
             transition={{ duration: 2, ease: "easeInOut" }}
             className="min-h-screen text-mafia-light flex flex-col items-center py-6 px-4"
         >
+
+            {/* Game Over Animation */}
+            {isGameOver && winner && <WinAnimation winner={winner} />}
 
             {/* Phase Overlay */}
             <AnimatePresence>
@@ -365,23 +381,70 @@ export function Game() {
                 ) : null}
             </div>
 
+            {/* Mayor Veto Prompt */}
+            {gameState.phase === 'MAYOR_VETO' && gameState.myRole === 'MAYOR' && me?.isAlive && !(gameState as any).mayorVetoUsed && (
+                <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="w-full max-w-4xl bg-[#8a1a1a] border border-red-500 rounded p-6 mb-8 shadow-[0_0_20px_rgba(255,0,0,0.5)] text-center"
+                >
+                    <h3 className="text-2xl font-bold text-white mb-2 tracking-widest uppercase">Рішення Мера</h3>
+                    <p className="mb-4 text-red-200">Ви можете накласти ВЕТО і врятувати цього гравця від страти.</p>
+                    <button
+                        onClick={() => socket?.emit('use_veto', { roomId: gameState.roomId })}
+                        className="bg-black hover:bg-gray-900 border border-red-500 hover:border-red-400 text-white font-bold py-3 px-8 rounded transition duration-200 drop-shadow-md text-lg tracking-wider"
+                    >
+                        НАКЛАСТИ ВЕТО
+                    </button>
+                    <span className="text-red-300 opacity-80 mt-4 block text-sm">Якщо нічого не зробити - гравця зіллє набрід.</span>
+                </motion.div>
+            )}
+
+            {/* Mobile Tabs Navigation */}
+            <div className="w-full max-w-4xl md:hidden flex gap-2 mb-4 bg-[#111] border border-gray-800 p-1 rounded-lg">
+                <button
+                    onClick={() => setMobileTab('players')}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'players' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                    ГРАВЦІ
+                </button>
+                <button
+                    onClick={() => setMobileTab('chat')}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'chat' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                    ЧАТ
+                </button>
+                <button
+                    onClick={() => setMobileTab('bets')}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'bets' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
+                >
+                    ДІЇ (СТАВКИ)
+                </button>
+            </div>
+
             {/* Main Game Grid */}
             <div className="w-full max-w-4xl grid md:grid-cols-3 gap-6">
 
-                <div className="md:col-span-2 space-y-6">
-                    <BettingPanel />
-                    <PlayerGrid handleAction={handleAction} roleLabel={roleLabel} />
+                <div className={`md:col-span-2 space-y-6 flex flex-col ${mobileTab !== 'players' && mobileTab !== 'bets' ? 'hidden md:flex' : ''}`}>
+                    <div className={`${mobileTab === 'bets' ? 'block md:hidden' : 'hidden md:block'}`}>
+                        <BettingPanel />
+                    </div>
+                    <div className={`${mobileTab === 'players' ? 'block' : 'hidden md:block'}`}>
+                        <PlayerGrid handleAction={handleAction} roleLabel={roleLabel} />
+                    </div>
                 </div>
 
-                <ChatPanel
-                    donMode={donMode}
-                    setDonMode={setDonMode}
-                    lastWill={lastWill}
-                    setLastWill={setLastWill}
-                    showLastWill={showLastWill}
-                    setShowLastWill={setShowLastWill}
-                    submitLastWill={submitLastWill}
-                />
+                <div className={`${mobileTab === 'chat' ? 'block' : 'hidden md:block'}`}>
+                    <ChatPanel
+                        donMode={donMode}
+                        setDonMode={setDonMode}
+                        lastWill={lastWill}
+                        setLastWill={setLastWill}
+                        showLastWill={showLastWill}
+                        setShowLastWill={setShowLastWill}
+                        submitLastWill={submitLastWill}
+                    />
+                </div>
 
             </div>
             {/* Sound Settings Modal */}

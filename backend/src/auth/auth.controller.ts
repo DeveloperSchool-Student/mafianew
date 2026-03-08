@@ -1,12 +1,28 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, UseGuards, Request } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, BindEmailDto, ForgotPasswordDto, ResetPasswordDto, TwoFactorTokenDto, TwoFactorAuthDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  BindEmailDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  TwoFactorTokenDto,
+  TwoFactorAuthDto,
+} from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post('register')
@@ -14,7 +30,7 @@ export class AuthController {
     return this.authService.register(registerDto);
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
@@ -48,13 +64,19 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('2fa/turn-on')
-  async turnOnTwoFactorAuthentication(@Request() req: any, @Body() body: TwoFactorTokenDto) {
+  async turnOnTwoFactorAuthentication(
+    @Request() req: any,
+    @Body() body: TwoFactorTokenDto,
+  ) {
     return this.authService.turnOnTwoFactorAuthentication(req.user.id, body);
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('2fa/turn-off')
-  async turnOffTwoFactorAuthentication(@Request() req: any, @Body() body: TwoFactorTokenDto) {
+  async turnOffTwoFactorAuthentication(
+    @Request() req: any,
+    @Body() body: TwoFactorTokenDto,
+  ) {
     return this.authService.turnOffTwoFactorAuthentication(req.user.id, body);
   }
 

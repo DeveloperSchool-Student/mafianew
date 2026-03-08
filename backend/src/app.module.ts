@@ -20,10 +20,12 @@ import { TournamentModule } from './tournament/tournament.module';
 @Module({
   imports: [
     // Rate limiting: max 60 requests per 60 seconds per IP
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 60,
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 60,
+      },
+    ]),
     PrismaModule,
     UsersModule,
     AuthModule,
@@ -48,4 +50,4 @@ import { TournamentModule } from './tournament/tournament.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

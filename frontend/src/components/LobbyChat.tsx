@@ -7,6 +7,9 @@ interface ChatMessage {
     sender: string;
     text: string;
     timestamp: string;
+    staffRoleKey?: string | null;
+    staffRoleTitle?: string | null;
+    staffRoleColor?: string | null;
 }
 
 export function LobbyChat() {
@@ -107,10 +110,25 @@ export function LobbyChat() {
                             <>
                                 {messages.map((msg) => {
                                     const isMe = msg.sender === user?.username;
+                                    const isSystem = msg.sender === 'SYSTEM';
                                     return (
                                         <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                                            <div className="flex items-baseline gap-2 mb-1">
-                                                <span className={`text-xs font-bold ${isMe ? 'text-mafia-red' : 'text-gray-300'}`}>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                {msg.staffRoleTitle && msg.staffRoleColor && !isSystem && (
+                                                    <span
+                                                        className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                                                        style={{
+                                                            color: msg.staffRoleColor,
+                                                            backgroundColor: msg.staffRoleColor + '22',
+                                                            border: `1px solid ${msg.staffRoleColor}55`,
+                                                        }}
+                                                    >
+                                                        {msg.staffRoleTitle}
+                                                    </span>
+                                                )}
+                                                <span className={`text-xs font-bold ${isMe ? 'text-mafia-red' : msg.staffRoleColor ? '' : 'text-gray-300'}`}
+                                                    style={msg.staffRoleColor && !isMe ? { color: msg.staffRoleColor } : undefined}
+                                                >
                                                     {isMe ? 'Ви' : msg.sender}
                                                 </span>
                                                 <span className="text-[10px] text-gray-500">{formatTime(msg.timestamp)}</span>

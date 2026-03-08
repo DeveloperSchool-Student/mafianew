@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { getFingerprint } from '../utils/fingerprint';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -33,7 +34,8 @@ export function Login() {
         const endpoint = isLogin ? '/auth/login' : '/auth/register';
 
         try {
-            const res = await axios.post(`${API_URL}${endpoint}`, { username, password });
+            const fingerprint = await getFingerprint().catch(() => undefined);
+            const res = await axios.post(`${API_URL}${endpoint}`, { username, password, fingerprint });
 
             if (res.data.requires2FA) {
                 setRequires2FA(true);

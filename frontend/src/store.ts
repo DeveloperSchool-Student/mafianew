@@ -23,6 +23,7 @@ export interface ChatMessage {
 export interface GameState {
     roomId: string | null;
     hostId: string | null;
+    type?: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
     phase: string | null;
     players: any[];
     myRole: string | null;
@@ -54,12 +55,14 @@ interface AppState {
     socket: Socket | null;
     gameState: GameState;
     soundSettings: { master: number; music: number; sfx: number };
+    theme: 'dark' | 'light';
     isInitializing: boolean;
 
     setUser: (user: User | null) => void;
     setSocket: (socket: Socket | null) => void;
     setGameState: (state: Partial<GameState>) => void;
     updateSoundSettings: (settings: Partial<{ master: number; music: number; sfx: number }>) => void;
+    setTheme: (theme: 'dark' | 'light') => void;
     logout: () => void;
     fetchCurrentUser: () => Promise<void>;
 }
@@ -87,6 +90,7 @@ export const useAppStore = create<AppState>((set) => ({
         }
     },
     soundSettings: JSON.parse(localStorage.getItem('mafia_sound_settings') || '{"master": 1, "music": 0.5, "sfx": 1}'),
+    theme: (localStorage.getItem('mafia_theme') as 'dark' | 'light') || 'dark',
 
     setUser: (user) => {
         if (user) {
@@ -108,6 +112,12 @@ export const useAppStore = create<AppState>((set) => ({
         localStorage.setItem('mafia_sound_settings', JSON.stringify(newSettings));
         return { soundSettings: newSettings };
     }),
+
+    setTheme: (theme) => {
+        localStorage.setItem('mafia_theme', theme);
+        document.documentElement.setAttribute('data-theme', theme);
+        set({ theme });
+    },
 
     logout: () => {
         const currentSocket = useAppStore.getState().socket;

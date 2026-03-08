@@ -6,7 +6,15 @@ import * as crypto from 'crypto';
 // @ts-ignore
 import { generateSecret, verifySync } from 'otplib';
 import * as qrcode from 'qrcode';
-import { RegisterDto, LoginDto, BindEmailDto, ForgotPasswordDto, ResetPasswordDto, TwoFactorTokenDto, TwoFactorAuthDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  BindEmailDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  TwoFactorTokenDto,
+  TwoFactorAuthDto,
+} from './dto/auth.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 
@@ -17,7 +25,7 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private mailService: MailService,
-  ) { }
+  ) {}
 
   async validateUser(username: string, pass: string): Promise<any> {
     const user = await this.usersService.findByUsername(username);
@@ -34,7 +42,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (user.profile?.bannedUntil && new Date(user.profile.bannedUntil) > new Date()) {
+    if (
+      user.profile?.bannedUntil &&
+      new Date(user.profile.bannedUntil) > new Date()
+    ) {
       throw new UnauthorizedException('Акаунт заблоковано адміністратором.');
     }
 
@@ -45,10 +56,14 @@ export class AuthService {
       };
     }
 
-    // Update lastLoginAt
+    // Update lastLoginAt and fingerprint
+    const updateData: any = { lastLoginAt: new Date() };
+    if (loginDto.fingerprint) {
+      updateData.fingerprint = loginDto.fingerprint;
+    }
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: updateData,
     });
 
     const payload = {
@@ -76,7 +91,16 @@ export class AuthService {
       throw new UnauthorizedException('Нікнейм має бути від 3 до 20 символів.');
     }
 
-    const bannedWords = ['fuck', 'shit', 'сука', 'бляд', 'хуй', 'пизд', 'еба', 'нахуй'];
+    const bannedWords = [
+      'fuck',
+      'shit',
+      'сука',
+      'бляд',
+      'хуй',
+      'пизд',
+      'еба',
+      'нахуй',
+    ];
     const lower = username.toLowerCase();
     if (bannedWords.some((w) => lower.includes(w))) {
       throw new UnauthorizedException('Нікнейм містить заборонені слова.');
@@ -90,6 +114,7 @@ export class AuthService {
     const user = await this.usersService.create({
       username,
       password: hashedPassword,
+      fingerprint: registerDto.fingerprint || undefined,
     });
 
     const payload = {
@@ -113,9 +138,13 @@ export class AuthService {
     const { email } = bindEmailDto;
 
     // Check if email already in use
-    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
     if (existingUser && existingUser.id !== userId) {
-      throw new UnauthorizedException('Ця пошта вже використовується іншим акаунтом.');
+      throw new UnauthorizedException(
+        'Ця пошта вже використовується іншим акаунтом.',
+      );
     }
 
     await this.prisma.user.update({
@@ -123,7 +152,7 @@ export class AuthService {
       data: { email },
     });
 
-    return { success: true, message: 'Пошту успішно прив\'язано.' };
+    return { success: true, message: "Пошту успішно прив'язано." };
   }
 
   async forgotPassword(forgotDto: ForgotPasswordDto) {
@@ -132,7 +161,10 @@ export class AuthService {
 
     if (!user) {
       // Return success even if not found to prevent email enumeration
-      return { success: true, message: 'Якщо пошта знайдена, на неї відправлено лист із посиланням.' };
+      return {
+        success: true,
+        message: 'Якщо пошта знайдена, на неї відправлено лист із посиланням.',
+      };
     }
 
     const resetToken = crypto.randomBytes(32).toString('hex');
@@ -146,7 +178,10 @@ export class AuthService {
     const resetLink = `${process.env.VITE_FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
     await this.mailService.sendPasswordResetMail(email, resetLink);
 
-    return { success: true, message: 'Якщо пошта знайдена, на неї відправлено лист із посиланням.' };
+    return {
+      success: true,
+      message: 'Якщо пошта знайдена, на неї відправлено лист із посиланням.',
+    };
   }
 
   async resetPassword(resetDto: ResetPasswordDto) {
@@ -160,7 +195,9 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Токен недійсний або його час дії минув.');
+      throw new UnauthorizedException(
+        'Токен недійсний або його час дії минув.',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -174,10 +211,11 @@ export class AuthService {
       },
     });
 
-    return { success: true, message: 'Пароль успішно змінено. Тепер ви можете увійти.' };
+    return {
+      success: true,
+      message: 'Пароль успішно змінено. Тепер ви можете увійти.',
+    };
   }
-
-
 
   async generateTwoFactorSecret(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -198,10 +236,15 @@ export class AuthService {
     };
   }
 
-  async turnOnTwoFactorAuthentication(userId: string, twoFactorTokenDto: TwoFactorTokenDto) {
+  async turnOnTwoFactorAuthentication(
+    userId: string,
+    twoFactorTokenDto: TwoFactorTokenDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.twoFactorSecret) {
-      throw new UnauthorizedException('Не вдалося увімкнути 2FA. Спочатку згенеруйте секретний ключ.');
+      throw new UnauthorizedException(
+        'Не вдалося увімкнути 2FA. Спочатку згенеруйте секретний ключ.',
+      );
     }
 
     const verification = verifySync({
@@ -221,7 +264,10 @@ export class AuthService {
     return { success: true, message: '2FA успішно увімкнено.' };
   }
 
-  async turnOffTwoFactorAuthentication(userId: string, twoFactorTokenDto: TwoFactorTokenDto) {
+  async turnOffTwoFactorAuthentication(
+    userId: string,
+    twoFactorTokenDto: TwoFactorTokenDto,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.twoFactorSecret) {
       throw new UnauthorizedException('2FA не увімкнено.');
@@ -245,7 +291,9 @@ export class AuthService {
   }
 
   async authenticate2FA(twoFactorAuthDto: TwoFactorAuthDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: twoFactorAuthDto.userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: twoFactorAuthDto.userId },
+    });
     if (!user || !user.isTwoFactorEnabled || !user.twoFactorSecret) {
       throw new UnauthorizedException('2FA не увімкнено для цього акаунта.');
     }

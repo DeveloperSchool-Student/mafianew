@@ -1,4 +1,13 @@
-import { Controller, Get, Post, UseGuards, Request, Body, BadRequestException, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+  Request,
+  Body,
+  BadRequestException,
+  Param,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
@@ -7,13 +16,13 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(
     private prisma: PrismaService,
-    private usersService: UsersService
-  ) { }
+    private usersService: UsersService,
+  ) {}
 
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
   async getProfile(@Request() req: { user: { id: string } }) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
@@ -27,13 +36,27 @@ export class UsersController {
             matchHistory: {
               include: { match: true },
               orderBy: { match: { createdAt: 'desc' } },
-              take: 10
-            }
-          }
+              take: 10,
+            },
+          },
         },
         wallet: true,
       },
     });
+
+    if (!user || !user.profile) return user;
+
+    const favRoleQuery = await this.prisma.matchParticipant.groupBy({
+      by: ['role'],
+      where: { profileId: user.profile.id },
+      _count: { role: true },
+      orderBy: { _count: { role: 'desc' } },
+      take: 1,
+    });
+    (user.profile as any).favoriteRole =
+      favRoleQuery.length > 0 ? favRoleQuery[0].role : 'НЕМАЄ';
+
+    return user;
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -49,21 +72,46 @@ export class UsersController {
         createdAt: true,
         profile: {
           select: {
-            matches: true, wins: true, losses: true,
-            avatarUrl: true, xp: true, level: true,
-            activeFrame: true, title: true, mmr: true,
-            clanId: true, clanRole: true,
+            id: true,
+            matches: true,
+            wins: true,
+            losses: true,
+            avatarUrl: true,
+            xp: true,
+            level: true,
+            activeFrame: true,
+            title: true,
+            mmr: true,
+            clanId: true,
+            clanRole: true,
+            winStreak: true,
+            maxWinStreak: true,
+            totalDuration: true,
+            survivedMatches: true,
             clan: { select: { id: true, name: true } },
             matchHistory: {
               include: { match: true },
               orderBy: { match: { createdAt: 'desc' } },
-              take: 10
-            }
-          }
+              take: 10,
+            },
+          },
         },
       },
     });
     if (!target) throw new BadRequestException('Користувача не знайдено');
+
+    if (target.profile) {
+      const favRoleQuery = await this.prisma.matchParticipant.groupBy({
+        by: ['role'],
+        where: { profileId: target.profile.id },
+        _count: { role: true },
+        orderBy: { _count: { role: 'desc' } },
+        take: 1,
+      });
+      (target.profile as any).favoriteRole =
+        favRoleQuery.length > 0 ? favRoleQuery[0].role : 'НЕМАЄ';
+    }
+
     return target;
   }
 
@@ -77,7 +125,7 @@ export class UsersController {
   async findUserByUsername(@Param('username') username: string) {
     const user = await this.prisma.user.findUnique({
       where: { username },
-      select: { id: true, username: true }
+      select: { id: true, username: true },
     });
     if (!user) throw new BadRequestException('Користувавача не знайдено');
     return user;
@@ -87,13 +135,14 @@ export class UsersController {
   @Post('avatar')
   async changeAvatar(
     @Request() req: { user: { id: string } },
-    @Body() body: { avatarUrl: string }
+    @Body() body: { avatarUrl: string },
   ) {
     const url = (body.avatarUrl || '').trim();
 
     // Validation
     if (!url) throw new BadRequestException('URL не може бути порожнім.');
-    if (url.length > 500) throw new BadRequestException('URL занадто довгий (макс. 500 символів).');
+    if (url.length > 500)
+      throw new BadRequestException('URL занадто довгий (макс. 500 символів).');
 
     // Must be valid HTTP(S) URL
     try {
@@ -102,23 +151,42 @@ export class UsersController {
         throw new Error();
       }
     } catch {
-      throw new BadRequestException('Невалідний URL. Використовуйте http:// або https://');
+      throw new BadRequestException(
+        'Невалідний URL. Використовуйте http:// або https://',
+      );
     }
 
     // Block SVG (XSS risk) and non-image extensions
     const lower = url.toLowerCase();
     if (lower.endsWith('.svg') || lower.includes('.svg?')) {
-      throw new BadRequestException('SVG файли заборонені з міркувань безпеки.');
+      throw new BadRequestException(
+        'SVG файли заборонені з міркувань безпеки.',
+      );
     }
 
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.bmp'];
-    const hasValidExtension = allowedExtensions.some(ext =>
-      lower.includes(ext + '?') || lower.includes(ext + '#') || lower.endsWith(ext)
+    const allowedExtensions = [
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.gif',
+      '.webp',
+      '.avif',
+      '.bmp',
+    ];
+    const hasValidExtension = allowedExtensions.some(
+      (ext) =>
+        lower.includes(ext + '?') ||
+        lower.includes(ext + '#') ||
+        lower.endsWith(ext),
     );
     // Allow URLs without extension (e.g. Discord CDN, Imgur short links)
-    const hasAnyExtension = /\.\w{2,5}(\?|#|$)/.test(lower.split('/').pop() || '');
+    const hasAnyExtension = /\.\w{2,5}(\?|#|$)/.test(
+      lower.split('/').pop() || '',
+    );
     if (hasAnyExtension && !hasValidExtension) {
-      throw new BadRequestException('Дозволені лише зображення (jpg, png, gif, webp).');
+      throw new BadRequestException(
+        'Дозволені лише зображення (jpg, png, gif, webp).',
+      );
     }
 
     return this.usersService.updateAvatar(req.user.id, url);
@@ -128,7 +196,7 @@ export class UsersController {
   @Post('store/buy')
   async buyFrame(
     @Request() req: { user: { id: string } },
-    @Body() body: { frameId: string }
+    @Body() body: { frameId: string },
   ) {
     try {
       return await this.usersService.buyFrame(req.user.id, body.frameId);
@@ -141,7 +209,7 @@ export class UsersController {
   @Post('store/equip')
   async equipFrame(
     @Request() req: { user: { id: string } },
-    @Body() body: { frameId: string }
+    @Body() body: { frameId: string },
   ) {
     try {
       return await this.usersService.equipFrame(req.user.id, body.frameId);
@@ -160,7 +228,7 @@ export class UsersController {
   @Post('clans')
   async createClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { name: string }
+    @Body() body: { name: string },
   ) {
     try {
       return await this.usersService.createClan(req.user.id, body.name);
@@ -173,7 +241,7 @@ export class UsersController {
   @Post('clans/join')
   async joinClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { clanName: string }
+    @Body() body: { clanName: string },
   ) {
     try {
       return await this.usersService.joinClan(req.user.id, body.clanName);
@@ -184,9 +252,7 @@ export class UsersController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('clans/leave')
-  async leaveClan(
-    @Request() req: { user: { id: string } }
-  ) {
+  async leaveClan(@Request() req: { user: { id: string } }) {
     try {
       return await this.usersService.leaveClan(req.user.id);
     } catch (e: any) {
@@ -198,10 +264,13 @@ export class UsersController {
   @Post('clans/kick')
   async kickFromClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetUserId: string }
+    @Body() body: { targetUserId: string },
   ) {
     try {
-      return await this.usersService.kickFromClan(req.user.id, body.targetUserId);
+      return await this.usersService.kickFromClan(
+        req.user.id,
+        body.targetUserId,
+      );
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }
@@ -211,10 +280,15 @@ export class UsersController {
   @Post('clans/promote')
   async promoteInClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetUserId: string, newRole: 'MEMBER' | 'OFFICER' | 'OWNER' }
+    @Body()
+    body: { targetUserId: string; newRole: 'MEMBER' | 'OFFICER' | 'OWNER' },
   ) {
     try {
-      return await this.usersService.promoteInClan(req.user.id, body.targetUserId, body.newRole);
+      return await this.usersService.promoteInClan(
+        req.user.id,
+        body.targetUserId,
+        body.newRole,
+      );
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }
@@ -224,10 +298,14 @@ export class UsersController {
   @Post('clans/war/declare')
   async declareClanWar(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetClanId: string, customBet: number }
+    @Body() body: { targetClanId: string; customBet: number },
   ) {
     try {
-      return await this.usersService.declareClanWar(req.user.id, body.targetClanId, body.customBet);
+      return await this.usersService.declareClanWar(
+        req.user.id,
+        body.targetClanId,
+        body.customBet,
+      );
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }
@@ -237,7 +315,7 @@ export class UsersController {
   @Post('clans/war/:id/accept')
   async acceptClanWar(
     @Request() req: { user: { id: string } },
-    @Param('id') warId: string
+    @Param('id') warId: string,
   ) {
     try {
       return await this.usersService.acceptClanWar(req.user.id, warId);
@@ -250,7 +328,7 @@ export class UsersController {
   @Post('clans/war/:id/reject')
   async rejectClanWar(
     @Request() req: { user: { id: string } },
-    @Param('id') warId: string
+    @Param('id') warId: string,
   ) {
     try {
       return await this.usersService.rejectClanWar(req.user.id, warId);
@@ -261,9 +339,7 @@ export class UsersController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('clans/wars')
-  async getClanWars(
-    @Request() req: { user: { id: string } }
-  ) {
+  async getClanWars(@Request() req: { user: { id: string } }) {
     try {
       return await this.usersService.getClanWars(req.user.id);
     } catch (e: any) {
@@ -273,9 +349,7 @@ export class UsersController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('quests')
-  async getQuests(
-    @Request() req: { user: { id: string } }
-  ) {
+  async getQuests(@Request() req: { user: { id: string } }) {
     try {
       return await this.usersService.getOrCreateDailyQuests(req.user.id);
     } catch (e: any) {
@@ -287,10 +361,13 @@ export class UsersController {
   @Post('quests/claim')
   async claimQuestReward(
     @Request() req: { user: { id: string } },
-    @Body() body: { questId: string }
+    @Body() body: { questId: string },
   ) {
     try {
-      return await this.usersService.claimQuestReward(req.user.id, body.questId);
+      return await this.usersService.claimQuestReward(
+        req.user.id,
+        body.questId,
+      );
     } catch (e: any) {
       throw new BadRequestException(e.message);
     }

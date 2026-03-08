@@ -4,11 +4,33 @@
  * Defense-in-depth against XSS (React already escapes JSX output).
  */
 export function sanitize(input: string, maxLength = 500): string {
-    if (!input || typeof input !== 'string') return '';
-    // Strip HTML tags
-    let cleaned = input.replace(/<[^>]*>/g, '');
-    // Remove null bytes
-    cleaned = cleaned.replace(/\0/g, '');
-    // Trim whitespace and limit length
-    return cleaned.trim().substring(0, maxLength);
+  if (!input || typeof input !== 'string') return '';
+  // Strip HTML tags
+  let cleaned = input.replace(/<[^>]*>/g, '');
+  // Remove null bytes
+  cleaned = cleaned.replace(/\0/g, '');
+
+  // Block external URLs except allowed ones
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  cleaned = cleaned.replace(urlRegex, (match) => {
+    const allowed = [
+      'youtube.com',
+      'youtu.be',
+      'imgur.com',
+      'discord.gg',
+      'discord.com',
+    ];
+    try {
+      const url = new URL(match);
+      if (allowed.some((domain) => url.hostname.endsWith(domain))) {
+        return match;
+      }
+      return '[LINK BLOCKED]';
+    } catch {
+      return '[LINK BLOCKED]';
+    }
+  });
+
+  // Trim whitespace and limit length
+  return cleaned.trim().substring(0, maxLength);
 }

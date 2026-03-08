@@ -29,9 +29,9 @@ interface UserProfile {
 }
 
 export function Profile() {
-    const { user, logout } = useAppStore();
+    const { user, logout, theme, setTheme } = useAppStore();
     const navigate = useNavigate();
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { id: routeUserId } = useParams<{ id?: string }>();
     const isOwnProfile = !routeUserId || routeUserId === user?.id;
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -471,36 +471,74 @@ export function Profile() {
 
                             <hr className="border-gray-800 my-4" />
 
-                            <div className="flex flex-col gap-2">
-                                <p className="text-sm text-gray-400 mb-1">Налаштування звуку</p>
-                                <div className="flex items-center gap-4">
-                                    <button
-                                        onClick={() => {
-                                            audioManager.toggleMute();
-                                            setIsMuted(audioManager.isAudioMuted());
-                                        }}
-                                        className="text-gray-400 hover:text-white transition"
-                                    >
-                                        {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-                                    </button>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={volume}
-                                        onChange={(e) => {
-                                            const newVol = parseFloat(e.target.value);
-                                            audioManager.setVolume(newVol);
-                                            setVolume(newVol);
-                                            if (isMuted && newVol > 0) {
+                            <div className="flex flex-col gap-4">
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-2">Налаштування звуку</p>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => {
                                                 audioManager.toggleMute();
-                                                setIsMuted(false);
-                                            }
-                                        }}
-                                        className="flex-1 accent-mafia-red bg-gray-700 h-2 rounded-lg appearance-none cursor-pointer"
-                                    />
-                                    <span className="text-xs text-gray-500 w-8">{Math.round(volume * 100)}%</span>
+                                                setIsMuted(audioManager.isAudioMuted());
+                                            }}
+                                            className="text-gray-400 hover:text-white transition"
+                                        >
+                                            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                                        </button>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.05"
+                                            value={volume}
+                                            onChange={(e) => {
+                                                const newVol = parseFloat(e.target.value);
+                                                audioManager.setVolume(newVol);
+                                                setVolume(newVol);
+                                                if (isMuted && newVol > 0) {
+                                                    audioManager.toggleMute();
+                                                    setIsMuted(false);
+                                                }
+                                            }}
+                                            className="flex-1 accent-mafia-red bg-gray-700 h-2 rounded-lg appearance-none cursor-pointer"
+                                        />
+                                        <span className="text-xs text-gray-500 w-8">{Math.round(volume * 100)}%</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-2">Тема оформлення</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setTheme('dark')}
+                                            className={`px-4 py-1.5 rounded transition font-bold text-sm ${theme === 'dark' ? 'bg-mafia-red text-white' : 'bg-[#1a1a1a] border border-gray-700 text-gray-400'}`}
+                                        >
+                                            Dark
+                                        </button>
+                                        <button
+                                            onClick={() => setTheme('light')}
+                                            className={`px-4 py-1.5 rounded transition font-bold text-sm ${theme === 'light' ? 'bg-mafia-red text-white' : 'bg-[#1a1a1a] border border-gray-700 text-gray-400'}`}
+                                        >
+                                            Light
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-sm text-gray-400 mb-2">Мова (Language)</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => i18n.changeLanguage('uk')}
+                                            className={`px-4 py-1.5 rounded transition font-bold text-sm ${i18n.language === 'uk' || i18n.language === 'ua' ? 'bg-gray-200 text-black' : 'bg-[#1a1a1a] border border-gray-700 text-gray-400'}`}
+                                        >
+                                            UA
+                                        </button>
+                                        <button
+                                            onClick={() => i18n.changeLanguage('en')}
+                                            className={`px-4 py-1.5 rounded transition font-bold text-sm ${i18n.language === 'en' ? 'bg-gray-200 text-black' : 'bg-[#1a1a1a] border border-gray-700 text-gray-400'}`}
+                                        >
+                                            EN
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -566,6 +604,40 @@ export function Profile() {
                             <p className="text-[10px] sm:text-xs text-green-500 mb-1 sm:mb-2 font-bold uppercase">{t('profile.wins_losses')}</p>
                             <p className="text-xl sm:text-2xl font-bold text-white">
                                 <span className="text-green-400">{profile.profile?.wins || 0}</span> <span className="text-gray-600 mx-1">/</span> <span className="text-mafia-red">{profile.profile?.losses || 0}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <h3 className="text-sm font-bold text-gray-400 mb-4 mt-8 tracking-widest uppercase border-t border-gray-800 pt-8">Детальна Статистика</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-4">
+                        <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Відсоток перемог (WR%)</p>
+                            <p className="text-xl sm:text-2xl font-bold text-white">
+                                {profile.profile?.matches ? ((profile.profile.wins / profile.profile.matches) * 100).toFixed(1) : 0}%
+                            </p>
+                        </div>
+                        <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Улюблена роль</p>
+                            <p className="text-[14px] sm:text-[18px] font-bold text-blue-400 mt-2 truncate">
+                                {(profile.profile as any)?.favoriteRole || 'НЕМАЄ'}
+                            </p>
+                        </div>
+                        <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Найдовша серія</p>
+                            <p className="text-xl sm:text-2xl font-bold text-yellow-500">
+                                {(profile.profile as any)?.maxWinStreak || 0}
+                            </p>
+                        </div>
+                        <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Середня тривалість гри</p>
+                            <p className="text-xl sm:text-2xl font-bold text-white">
+                                {profile.profile?.matches ? (((profile.profile as any)?.totalDuration || 0) / profile.profile.matches).toFixed(1) : 0} дн.
+                            </p>
+                        </div>
+                        <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
+                            <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Виживань до кінця</p>
+                            <p className="text-xl sm:text-2xl font-bold text-green-400">
+                                {(profile.profile as any)?.survivedMatches || 0}
                             </p>
                         </div>
                     </div>

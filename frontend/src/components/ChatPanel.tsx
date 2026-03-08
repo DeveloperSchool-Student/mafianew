@@ -18,7 +18,13 @@ export function ChatPanel({
     submitLastWill
 }: ChatPanelProps) {
     const { user, gameState, socket } = useAppStore();
-    const [activeTab, setActiveTab] = useState<'chat' | 'notepad'>('chat');
+    const me = gameState.players?.find(p => p.userId === user?.id);
+    const isGameOver = gameState.phase === 'END_GAME';
+
+    // Default to dead chat if dead or spectator
+    const hasDeadChatAccess = (!me?.isAlive && me?.role !== undefined) || me?.isSpectator;
+    const [activeTab, setActiveTab] = useState<'chat' | 'notepad' | 'dead_chat'>(hasDeadChatAccess ? 'dead_chat' : 'chat');
+
     const [chatInput, setChatInput] = useState('');
     const [notepad, setNotepad] = useState(() => localStorage.getItem(`mafia_notepad_${useAppStore.getState().gameState.roomId}`) || '');
     const chatEndRef = useRef<HTMLDivElement>(null);
@@ -36,24 +42,34 @@ export function ChatPanel({
     const sendChat = (e: React.FormEvent) => {
         e.preventDefault();
         if (!chatInput.trim() || !socket || !gameState.roomId) return;
-        socket.emit('chat_message', { roomId: gameState.roomId, message: chatInput });
+
+        if (activeTab === 'dead_chat') {
+            socket.emit('chat_message', { roomId: gameState.roomId, message: chatInput, isDeadChat: true });
+        } else {
+            socket.emit('chat_message', { roomId: gameState.roomId, message: chatInput });
+        }
         setChatInput('');
     };
-
-    const me = gameState.players?.find(p => p.userId === user?.id);
-    const isGameOver = gameState.phase === 'END_GAME';
 
     return (
         <div className="bg-[#111] border border-gray-800 rounded flex flex-col h-[500px] md:h-[600px] pb-safe">
             <div className="p-4 border-b border-gray-800 bg-black/50 flex justify-between items-center shrink-0">
-                <div className="flex gap-4">
-                    <button
-                        onClick={() => setActiveTab('chat')}
-                        className={`text-sm font-bold ${activeTab === 'chat' ? 'text-gray-200' : 'text-gray-600'}`}
-                    >ЧАТ</button>
+                <div className="flex gap-4 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                    {me?.isAlive && !me?.isSpectator && (
+                        <button
+                            onClick={() => setActiveTab('chat')}
+                            className={`text-sm font-bold transition-colors ${activeTab === 'chat' ? 'text-gray-200' : 'text-gray-600'}`}
+                        >ЧАТ</button>
+                    )}
+                    {hasDeadChatAccess && (
+                        <button
+                            onClick={() => setActiveTab('dead_chat')}
+                            className={`text-sm font-bold transition-colors ${activeTab === 'dead_chat' ? 'text-gray-200' : 'text-gray-600'}`}
+                        >МЕРТВІ/ГЛЯДАЧІ</button>
+                    )}
                     <button
                         onClick={() => setActiveTab('notepad')}
-                        className={`text-sm font-bold ${activeTab === 'notepad' ? 'text-gray-200' : 'text-gray-600'}`}
+                        className={`text-sm font-bold transition-colors ${activeTab === 'notepad' ? 'text-gray-200' : 'text-gray-600'}`}
                     >БЛОКНОТ</button>
                 </div>
 
@@ -100,9 +116,9 @@ export function ChatPanel({
             )}
 
             <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col min-h-0">
-                {activeTab === 'chat' ? (
+                {activeTab === 'chat' || activeTab === 'dead_chat' ? (
                     <div className="flex flex-col gap-2 mt-auto">
-                        {gameState.chat?.map(msg => (
+                        {gameState.chat?.filter(msg => activeTab === 'dead_chat' ? msg.type === 'dead' || msg.type === 'system' : msg.type !== 'dead').map(msg => (
                             <div key={msg.id} className={`p-2 rounded text-sm ${msg.type === 'system' ? 'bg-[#1a1a1a] text-gray-400 border-l-2 border-mafia-red' :
                                 msg.type === 'mafia' ? 'bg-red-900/20 text-red-200 border-l-2 border-red-500' :
                                     msg.type === 'dead' ? 'bg-gray-900 text-gray-500 italic' :
@@ -110,7 +126,21 @@ export function ChatPanel({
                                 }`}>
                                 {msg.type !== 'system' && <span className="font-bold mr-2 opacity-70">
                                     {msg.type === 'dead' && '[Мертві/Глядачі] '}
-                                    {msg.sender}:</span>}
+                                    {(msg as any).staffRoleTitle && (msg as any).staffRoleColor && (
+                                        <span
+                                            className="text-[10px] font-bold px-1 py-0.5 rounded mr-1 align-middle"
+                                            style={{
+                                                color: (msg as any).staffRoleColor,
+                                                backgroundColor: (msg as any).staffRoleColor + '22',
+                                                border: `1px solid ${(msg as any).staffRoleColor}55`,
+                                            }}
+                                        >
+                                            {(msg as any).staffRoleTitle}
+                                        </span>
+                                    )}
+                                    <span style={(msg as any).staffRoleColor ? { color: (msg as any).staffRoleColor } : undefined}>
+                                        {msg.sender}
+                                    </span>:</span>}
                                 <span>{msg.text}</span>
                             </div>
                         ))}
@@ -126,15 +156,23 @@ export function ChatPanel({
                 )}
             </div>
 
-            {activeTab === 'chat' && (
+            {(activeTab === 'chat' || activeTab === 'dead_chat') && (
                 <form onSubmit={sendChat} className="p-3 border-t border-gray-800 bg-black/50 shrink-0">
                     <input
                         type="text"
                         value={chatInput}
                         onChange={e => setChatInput(e.target.value)}
-                        placeholder={isGameOver ? 'Гра закінчена' : gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат (Tap here)'}
+                        placeholder={
+                            isGameOver ? 'Гра закінчена' :
+                                activeTab === 'dead_chat' ? 'Написати мертвим/глядачам...' :
+                                    gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат (Tap here)'
+                        }
                         className="w-full bg-[#1a1a1a] border border-gray-700 rounded-lg p-3 sm:p-2 text-white focus:outline-none focus:border-gray-500 text-base sm:text-sm disabled:opacity-50"
-                        disabled={isGameOver || !me?.isAlive || (gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON')}
+                        disabled={
+                            isGameOver ||
+                            (activeTab === 'chat' && (!me?.isAlive || (gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON'))) ||
+                            (activeTab === 'dead_chat' && (!hasDeadChatAccess))
+                        }
                     />
                 </form>
             )}

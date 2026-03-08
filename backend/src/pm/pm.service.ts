@@ -1,119 +1,144 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GameGateway } from '../game/game.gateway';
 import { sanitize } from '../utils/sanitize';
 
 @Injectable()
 export class PmService {
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly gameGateway: GameGateway
-    ) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gameGateway: GameGateway,
+  ) {}
 
-    async getConversations(userId: string) {
-        const messages = await this.prisma.privateMessage.findMany({
-            where: {
-                OR: [{ fromId: userId }, { toId: userId }],
-            },
-            include: {
-                from: { select: { id: true, username: true, profile: { select: { avatarUrl: true } } } },
-                to: { select: { id: true, username: true, profile: { select: { avatarUrl: true } } } },
-            },
-            orderBy: { createdAt: 'desc' },
+  async getConversations(userId: string) {
+    const messages = await this.prisma.privateMessage.findMany({
+      where: {
+        OR: [{ fromId: userId }, { toId: userId }],
+      },
+      include: {
+        from: {
+          select: {
+            id: true,
+            username: true,
+            profile: { select: { avatarUrl: true } },
+          },
+        },
+        to: {
+          select: {
+            id: true,
+            username: true,
+            profile: { select: { avatarUrl: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const conversations = new Map<string, any>();
+
+    messages.forEach((msg) => {
+      const otherUser = msg.fromId === userId ? msg.to : msg.from;
+      if (!conversations.has(otherUser.id)) {
+        conversations.set(otherUser.id, {
+          user: otherUser,
+          lastMessage: msg,
+          unreadCount: msg.toId === userId && !msg.readAt ? 1 : 0,
         });
+      } else if (msg.toId === userId && !msg.readAt) {
+        conversations.get(otherUser.id).unreadCount += 1;
+      }
+    });
 
-        const conversations = new Map<string, any>();
+    return Array.from(conversations.values());
+  }
 
-        messages.forEach(msg => {
-            const otherUser = msg.fromId === userId ? msg.to : msg.from;
-            if (!conversations.has(otherUser.id)) {
-                conversations.set(otherUser.id, {
-                    user: otherUser,
-                    lastMessage: msg,
-                    unreadCount: (msg.toId === userId && !msg.readAt) ? 1 : 0
-                });
-            } else if (msg.toId === userId && !msg.readAt) {
-                conversations.get(otherUser.id).unreadCount += 1;
-            }
-        });
+  async getMessages(userId: string, targetId: string) {
+    await this.prisma.privateMessage.updateMany({
+      where: {
+        toId: userId,
+        fromId: targetId,
+        readAt: null,
+      },
+      data: { readAt: new Date() },
+    });
 
-        return Array.from(conversations.values());
+    return this.prisma.privateMessage.findMany({
+      where: {
+        OR: [
+          { fromId: userId, toId: targetId },
+          { fromId: targetId, toId: userId },
+        ],
+      },
+      include: {
+        from: { select: { id: true, username: true } },
+        to: { select: { id: true, username: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    });
+  }
+
+  async sendMessage(userId: string, targetId: string, content: string) {
+    if (!content || !content.trim())
+      throw new BadRequestException('Повідомлення не може бути порожнім');
+
+    // Sanitize content (strip HTML tags)
+    content = sanitize(content, 1000);
+    if (!content)
+      throw new BadRequestException('Повідомлення не може бути порожнім');
+
+    // Check mute
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (profile?.mutedUntil && new Date(profile.mutedUntil) > new Date()) {
+      throw new ForbiddenException(
+        'У вас мут, ви не можете надсилати повідомлення',
+      );
     }
 
-    async getMessages(userId: string, targetId: string) {
-        await this.prisma.privateMessage.updateMany({
-            where: {
-                toId: userId,
-                fromId: targetId,
-                readAt: null
-            },
-            data: { readAt: new Date() }
-        });
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+    });
+    if (!target) throw new NotFoundException('Користувача не знайдено');
 
-        return this.prisma.privateMessage.findMany({
-            where: {
-                OR: [
-                    { fromId: userId, toId: targetId },
-                    { fromId: targetId, toId: userId },
-                ]
-            },
-            include: {
-                from: { select: { id: true, username: true } },
-                to: { select: { id: true, username: true } },
-            },
-            orderBy: { createdAt: 'asc' },
-            take: 100
-        });
-    }
+    // Optionally check if they are friends
+    const friendship = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { userId, friendId: targetId, status: 'accepted' },
+          { userId: targetId, friendId: userId, status: 'accepted' },
+        ],
+      },
+    });
+    if (!friendship)
+      throw new ForbiddenException('Ви можете писати лише друзям');
 
-    async sendMessage(userId: string, targetId: string, content: string) {
-        if (!content || !content.trim()) throw new BadRequestException('Повідомлення не може бути порожнім');
+    const message = await this.prisma.privateMessage.create({
+      data: {
+        fromId: userId,
+        toId: targetId,
+        content: content.trim(),
+      },
+      include: {
+        from: { select: { id: true, username: true } },
+      },
+    });
 
-        // Sanitize content (strip HTML tags)
-        content = sanitize(content, 1000);
-        if (!content) throw new BadRequestException('Повідомлення не може бути порожнім');
+    // Emit notification
+    this.gameGateway.server.to(targetId).emit('notification', {
+      type: 'info',
+      title: `Нове повідомлення від ${message.from.username}`,
+      message:
+        content.trim().substring(0, 50) + (content.length > 50 ? '...' : ''),
+    });
 
-        // Check mute
-        const profile = await this.prisma.profile.findUnique({ where: { userId } });
-        if (profile?.mutedUntil && new Date(profile.mutedUntil) > new Date()) {
-            throw new ForbiddenException('У вас мут, ви не можете надсилати повідомлення');
-        }
+    // Also emit specific message event just in case client needs to append to chat
+    this.gameGateway.server.to(targetId).emit('new_message', message);
 
-        const target = await this.prisma.user.findUnique({ where: { id: targetId } });
-        if (!target) throw new NotFoundException('Користувача не знайдено');
-
-        // Optionally check if they are friends
-        const friendship = await this.prisma.friendship.findFirst({
-            where: {
-                OR: [
-                    { userId, friendId: targetId, status: 'accepted' },
-                    { userId: targetId, friendId: userId, status: 'accepted' }
-                ]
-            }
-        });
-        if (!friendship) throw new ForbiddenException('Ви можете писати лише друзям');
-
-        const message = await this.prisma.privateMessage.create({
-            data: {
-                fromId: userId,
-                toId: targetId,
-                content: content.trim()
-            },
-            include: {
-                from: { select: { id: true, username: true } },
-            }
-        });
-
-        // Emit notification
-        this.gameGateway.server.to(targetId).emit('notification', {
-            type: 'info',
-            title: `Нове повідомлення від ${message.from.username}`,
-            message: content.trim().substring(0, 50) + (content.length > 50 ? '...' : '')
-        });
-
-        // Also emit specific message event just in case client needs to append to chat
-        this.gameGateway.server.to(targetId).emit('new_message', message);
-
-        return message;
-    }
+    return message;
+  }
 }

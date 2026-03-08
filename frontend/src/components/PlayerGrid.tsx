@@ -45,9 +45,9 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
                                     handleAction(p.userId);
                                 }
                             }}
-                            className={`p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center border transition-all duration-300 transform min-h-[60px] gap-2 sm:gap-0 ${p.isAlive
-                                ? `bg-[#1a1a1a] border-gray-700 hover:scale-[1.01] hover:border-mafia-red/50 cursor-pointer shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
-                                : 'bg-black opacity-50 border-gray-900 scale-[0.98] grayscale'
+                            className={`p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center border transform min-h-[60px] gap-2 sm:gap-0 ${p.isAlive
+                                    ? `bg-[#1a1a1a] border-gray-700 hover:scale-[1.01] transition-all duration-300 hover:border-mafia-red/50 cursor-pointer shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
+                                    : 'bg-black border-gray-900 scale-[0.98] transition-all duration-[2000ms] grayscale opacity-40 blur-[1px]'
                                 }`}
                         >
                             <div className="flex items-center gap-3 w-full sm:w-1/2 overflow-hidden">
@@ -55,7 +55,21 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
                                     {idx + 1}
                                 </div>
                                 <div className="flex flex-col min-w-0">
-                                    <span className={`font-medium truncate text-base ${!p.isAlive && !p.isSpectator && 'line-through text-red-900'} ${p.isSpectator && 'text-gray-500'}`}>
+                                    <span className={`font-medium truncate text-base ${!p.isAlive && !p.isSpectator && 'line-through text-red-900'} ${p.isSpectator && 'text-gray-500'}`}
+                                        style={p.staffRoleColor ? { color: p.staffRoleColor } : undefined}
+                                    >
+                                        {p.staffRoleTitle && p.staffRoleColor && (
+                                            <span
+                                                className="text-[9px] font-bold px-1 py-0.5 rounded mr-1.5 align-middle"
+                                                style={{
+                                                    color: p.staffRoleColor,
+                                                    backgroundColor: p.staffRoleColor + '22',
+                                                    border: `1px solid ${p.staffRoleColor}55`,
+                                                }}
+                                            >
+                                                {p.staffRoleTitle}
+                                            </span>
+                                        )}
                                         {p.username} {p.userId === user?.id && '(Ви)'}
                                         {p.isSpectator && <span className="ml-2 text-xs italic opacity-70">(Глядач)</span>}
                                     </span>

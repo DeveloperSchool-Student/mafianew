@@ -14,7 +14,7 @@ import { AdminService } from './admin.service';
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'))
 export class AdminController {
-  constructor(private readonly adminService: AdminService) { }
+  constructor(private readonly adminService: AdminService) {}
 
   /* ── Staff Management ── */
 
@@ -49,8 +49,13 @@ export class AdminController {
   /* ── Users ── */
 
   @Get('users')
-  listUsers(@Request() req: any) {
-    return this.adminService.listUsers(req.user);
+  listUsers(
+    @Request() req: any,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit = limitStr ? parseInt(limitStr, 10) : 50;
+    return this.adminService.listUsers(req.user, cursor, limit);
   }
 
   @Get('user/:id/punishments')
@@ -66,7 +71,7 @@ export class AdminController {
     @Body()
     body: {
       targetUsername: string;
-      type: 'BAN' | 'MUTE' | 'KICK';
+      type: 'BAN' | 'MUTE' | 'KICK' | 'WARN';
       durationSeconds?: number;
       scope?: string;
       reason?: string;
@@ -116,7 +121,8 @@ export class AdminController {
   @Post('reports')
   createReport(
     @Request() req: any,
-    @Body() body: { targetUsername: string; reason: string; screenshotUrl?: string },
+    @Body()
+    body: { targetUsername: string; reason: string; screenshotUrl?: string },
   ) {
     return this.adminService.createReport(req.user.sub, body);
   }
@@ -173,15 +179,17 @@ export class AdminController {
   /* ── Logs ── */
 
   @Get('logs')
-  getActionLogs(@Request() req: any) {
-    return this.adminService.getActionLogs(req.user);
+  getActionLogs(
+    @Request() req: any,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limitStr?: string,
+  ) {
+    const limit = limitStr ? parseInt(limitStr, 10) : 50;
+    return this.adminService.getActionLogs(req.user, cursor, limit);
   }
 
   @Post('logs/clear')
-  clearLogs(
-    @Request() req: any,
-    @Body() body: { olderThanDays?: number },
-  ) {
+  clearLogs(@Request() req: any, @Body() body: { olderThanDays?: number }) {
     return this.adminService.clearLogs(req.user, body);
   }
 
@@ -196,10 +204,7 @@ export class AdminController {
   /* ── Delete User ── */
 
   @Post('delete-user')
-  deleteUser(
-    @Request() req: any,
-    @Body() body: { targetUsername: string },
-  ) {
+  deleteUser(@Request() req: any, @Body() body: { targetUsername: string }) {
     return this.adminService.deleteUser(req.user, body);
   }
 
@@ -227,7 +232,10 @@ export class AdminController {
     @Param('id') warId: string,
     @Body() body: { winnerId: string | null },
   ) {
-    return this.adminService.resolveClanWar(req.user, { warId, winnerId: body.winnerId });
+    return this.adminService.resolveClanWar(req.user, {
+      warId,
+      winnerId: body.winnerId,
+    });
   }
 
   /* ── Events ── */
@@ -235,8 +243,33 @@ export class AdminController {
   @Post('events/launch')
   launchEvent(
     @Request() req: any,
-    @Body() body: { eventName: string; rewardCoins?: number; eventRoles?: string[] },
+    @Body()
+    body: { eventName: string; rewardCoins?: number; eventRoles?: string[] },
   ) {
     return this.adminService.launchEvent(req.user, body);
+  }
+
+  /* ── Stats ── */
+
+  @Get('stats')
+  getGlobalStats(@Request() req: any) {
+    return this.adminService.getGlobalStats(req.user);
+  }
+
+  /* ── Seasons ── */
+
+  @Get('seasons')
+  getSeasons(@Request() req: any) {
+    return this.adminService.getSeasons(req.user);
+  }
+
+  @Post('seasons/start')
+  startSeason(@Request() req: any, @Body() body: { name: string }) {
+    return this.adminService.startSeason(req.user, body);
+  }
+
+  @Post('seasons/end')
+  endSeason(@Request() req: any) {
+    return this.adminService.endSeason(req.user);
   }
 }

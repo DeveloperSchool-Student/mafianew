@@ -7,6 +7,12 @@
   --color-mafia-light: #e0e0e0;
 }
 
+:root[data-theme="light"] {
+  --color-mafia-dark: #f0f0f0;
+  --color-mafia-gray: #ffffff;
+  --color-mafia-light: #333333;
+}
+
 body {
   background-color: var(--color-mafia-dark);
   color: var(--color-mafia-light);

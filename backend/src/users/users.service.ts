@@ -4,7 +4,7 @@ import { Prisma, User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async create(data: Prisma.UserCreateInput): Promise<User> {
     return this.prisma.user.create({
@@ -19,7 +19,7 @@ export class UsersService {
   async findByUsername(username: string): Promise<any> {
     return this.prisma.user.findUnique({
       where: { username },
-      include: { profile: true }
+      include: { profile: true },
     });
   }
 
@@ -33,9 +33,9 @@ export class UsersService {
       orderBy: { mmr: 'desc' },
       include: {
         user: {
-          select: { username: true }
-        }
-      }
+          select: { username: true },
+        },
+      },
     });
   }
 
@@ -91,16 +91,17 @@ export class UsersService {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile) throw new Error('Профіль не знайдено');
 
-    if (profile.unlockedFrames.includes(frameId)) throw new Error('Вже придбано');
+    if (profile.unlockedFrames.includes(frameId))
+      throw new Error('Вже придбано');
 
     await this.prisma.wallet.update({
       where: { userId },
-      data: { soft: { decrement: cost } }
+      data: { soft: { decrement: cost } },
     });
 
     return this.prisma.profile.update({
       where: { userId },
-      data: { unlockedFrames: { push: frameId } }
+      data: { unlockedFrames: { push: frameId } },
     });
   }
 
@@ -114,12 +115,13 @@ export class UsersService {
 
     return this.prisma.profile.update({
       where: { userId },
-      data: { activeFrame: frameId === '' ? null : frameId }
+      data: { activeFrame: frameId === '' ? null : frameId },
     });
   }
 
   async createClan(userId: string, name: string) {
-    if (!name || name.length < 3 || name.length > 20) throw new Error('Некорректна назва клану');
+    if (!name || name.length < 3 || name.length > 20)
+      throw new Error('Некорректна назва клану');
 
     const existing = await this.prisma.clan.findUnique({ where: { name } });
     if (existing) throw new Error('Клан з такою назвою вже існує');
@@ -128,11 +130,12 @@ export class UsersService {
     if (profile?.clanId) throw new Error('Ви вже є учасником клану');
 
     const wallet = await this.prisma.wallet.findUnique({ where: { userId } });
-    if (!wallet || wallet.soft < 1000) throw new Error('Створення клану коштує 1000 монет');
+    if (!wallet || wallet.soft < 1000)
+      throw new Error('Створення клану коштує 1000 монет');
 
     await this.prisma.wallet.update({
       where: { userId },
-      data: { soft: { decrement: 1000 } }
+      data: { soft: { decrement: 1000 } },
     });
 
     const clan = await this.prisma.clan.create({
@@ -140,14 +143,14 @@ export class UsersService {
         name,
         ownerId: userId,
         members: {
-          connect: { id: profile!.id }
-        }
-      }
+          connect: { id: profile!.id },
+        },
+      },
     });
 
     await this.prisma.profile.update({
       where: { userId },
-      data: { clanRole: 'OWNER', clanContribution: 0 }
+      data: { clanRole: 'OWNER', clanContribution: 0 },
     });
 
     return clan;
@@ -157,12 +160,14 @@ export class UsersService {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (profile?.clanId) throw new Error('Ви вже є учасником клану');
 
-    const clan = await this.prisma.clan.findUnique({ where: { name: clanName } });
+    const clan = await this.prisma.clan.findUnique({
+      where: { name: clanName },
+    });
     if (!clan) throw new Error('Клан не знайдено');
 
     return this.prisma.profile.update({
       where: { userId },
-      data: { clanId: clan.id, clanRole: 'MEMBER', clanContribution: 0 }
+      data: { clanId: clan.id, clanRole: 'MEMBER', clanContribution: 0 },
     });
   }
 
@@ -170,69 +175,105 @@ export class UsersService {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile?.clanId) throw new Error('Ви не у клані');
 
-    const clan = await this.prisma.clan.findUnique({ where: { id: profile.clanId }, include: { members: true } });
+    const clan = await this.prisma.clan.findUnique({
+      where: { id: profile.clanId },
+      include: { members: true },
+    });
     if (clan?.ownerId === userId && clan.members.length > 1) {
-      throw new Error('Ви лідер клану. Передайте лідерство або видаліть всіх учасників');
+      throw new Error(
+        'Ви лідер клану. Передайте лідерство або видаліть всіх учасників',
+      );
     }
 
     if (clan?.ownerId === userId && clan.members.length === 1) {
-      await this.prisma.profile.update({ where: { userId }, data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 } });
+      await this.prisma.profile.update({
+        where: { userId },
+        data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 },
+      });
       await this.prisma.clan.delete({ where: { id: clan.id } });
       return { message: 'Клан видалено' };
     }
 
     return this.prisma.profile.update({
       where: { userId },
-      data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 }
+      data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 },
     });
   }
 
   async kickFromClan(userId: string, targetUserId: string) {
-    const actorProfile = await this.prisma.profile.findUnique({ where: { userId } });
+    const actorProfile = await this.prisma.profile.findUnique({
+      where: { userId },
+    });
     if (!actorProfile?.clanId) throw new Error('Ви не у клані');
-    if (actorProfile.clanRole !== 'OWNER' && actorProfile.clanRole !== 'OFFICER') {
+    if (
+      actorProfile.clanRole !== 'OWNER' &&
+      actorProfile.clanRole !== 'OFFICER'
+    ) {
       throw new Error('У вас немає прав для вигнання учасників');
     }
 
-    const targetProfile = await this.prisma.profile.findUnique({ where: { userId: targetUserId } });
+    const targetProfile = await this.prisma.profile.findUnique({
+      where: { userId: targetUserId },
+    });
     if (!targetProfile || targetProfile.clanId !== actorProfile.clanId) {
       throw new Error('Гравця не знайдено в цьому клані');
     }
 
-    if (targetProfile.clanRole === 'OWNER') throw new Error('Не можна вигнати лідера');
-    if (actorProfile.clanRole === 'OFFICER' && targetProfile.clanRole === 'OFFICER') {
+    if (targetProfile.clanRole === 'OWNER')
+      throw new Error('Не можна вигнати лідера');
+    if (
+      actorProfile.clanRole === 'OFFICER' &&
+      targetProfile.clanRole === 'OFFICER'
+    ) {
       throw new Error('Офіцер не може вигнати іншого офіцера');
     }
 
     return this.prisma.profile.update({
       where: { userId: targetUserId },
-      data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 }
+      data: { clanId: null, clanRole: 'MEMBER', clanContribution: 0 },
     });
   }
 
-  async promoteInClan(userId: string, targetUserId: string, newRole: 'MEMBER' | 'OFFICER' | 'OWNER') {
-    const actorProfile = await this.prisma.profile.findUnique({ where: { userId } });
+  async promoteInClan(
+    userId: string,
+    targetUserId: string,
+    newRole: 'MEMBER' | 'OFFICER' | 'OWNER',
+  ) {
+    const actorProfile = await this.prisma.profile.findUnique({
+      where: { userId },
+    });
     if (!actorProfile?.clanId || actorProfile.clanRole !== 'OWNER') {
       throw new Error('Тільки лідер може змінювати ролі');
     }
 
-    const targetProfile = await this.prisma.profile.findUnique({ where: { userId: targetUserId } });
+    const targetProfile = await this.prisma.profile.findUnique({
+      where: { userId: targetUserId },
+    });
     if (!targetProfile || targetProfile.clanId !== actorProfile.clanId) {
       throw new Error('Гравця не знайдено в цьому клані');
     }
 
     if (newRole === 'OWNER') {
       await this.prisma.$transaction([
-        this.prisma.profile.update({ where: { userId }, data: { clanRole: 'OFFICER' } }),
-        this.prisma.profile.update({ where: { userId: targetUserId }, data: { clanRole: 'OWNER' } }),
-        this.prisma.clan.update({ where: { id: actorProfile.clanId }, data: { ownerId: targetUserId } })
+        this.prisma.profile.update({
+          where: { userId },
+          data: { clanRole: 'OFFICER' },
+        }),
+        this.prisma.profile.update({
+          where: { userId: targetUserId },
+          data: { clanRole: 'OWNER' },
+        }),
+        this.prisma.clan.update({
+          where: { id: actorProfile.clanId },
+          data: { ownerId: targetUserId },
+        }),
       ]);
       return { message: 'Лідерство передано' };
     }
 
     return this.prisma.profile.update({
       where: { userId: targetUserId },
-      data: { clanRole: newRole }
+      data: { clanRole: newRole },
     });
   }
 
@@ -241,13 +282,13 @@ export class UsersService {
       include: {
         members: {
           include: {
-            user: { select: { username: true } }
-          }
+            user: { select: { username: true } },
+          },
         },
-        owner: { select: { username: true } }
+        owner: { select: { username: true } },
       },
       orderBy: { rating: 'desc' },
-      take: 50
+      take: 50,
     });
   }
 
@@ -260,10 +301,7 @@ export class UsersService {
 
     return this.prisma.clanWar.findMany({
       where: {
-        OR: [
-          { challengerId: profile.clanId },
-          { targetId: profile.clanId }
-        ],
+        OR: [{ challengerId: profile.clanId }, { targetId: profile.clanId }],
       },
       include: {
         challenger: { select: { name: true, rating: true } },
@@ -278,35 +316,49 @@ export class UsersService {
     });
   }
 
-  async declareClanWar(userId: string, targetClanId: string, customBet: number) {
+  async declareClanWar(
+    userId: string,
+    targetClanId: string,
+    customBet: number,
+  ) {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile?.clanId) throw new Error('Ви не у клані');
     if (profile.clanRole !== 'OWNER' && profile.clanRole !== 'OFFICER') {
       throw new Error('Тільки лідер або офіцери можуть оголошувати війну');
     }
 
-    if (profile.clanId === targetClanId) throw new Error('Не можна оголосити війну своєму клану');
+    if (profile.clanId === targetClanId)
+      throw new Error('Не можна оголосити війну своєму клану');
 
-    if (customBet < 0) throw new Error('Ставка не може бути від\'ємною');
+    if (customBet < 0) throw new Error("Ставка не може бути від'ємною");
 
     // Check if a pending or active war already exists
     const existingWar = await this.prisma.clanWar.findFirst({
       where: {
         OR: [
-          { challengerId: profile.clanId, targetId: targetClanId, status: { in: ['PENDING', 'ACTIVE'] } },
-          { challengerId: targetClanId, targetId: profile.clanId, status: { in: ['PENDING', 'ACTIVE'] } }
-        ]
-      }
+          {
+            challengerId: profile.clanId,
+            targetId: targetClanId,
+            status: { in: ['PENDING', 'ACTIVE'] },
+          },
+          {
+            challengerId: targetClanId,
+            targetId: profile.clanId,
+            status: { in: ['PENDING', 'ACTIVE'] },
+          },
+        ],
+      },
     });
 
-    if (existingWar) throw new Error('З цим кланом вже є активна або очікуюча війна');
+    if (existingWar)
+      throw new Error('З цим кланом вже є активна або очікуюча війна');
 
     return this.prisma.clanWar.create({
       data: {
         challengerId: profile.clanId,
         targetId: targetClanId,
-        customBet: customBet || 0
-      }
+        customBet: customBet || 0,
+      },
     });
   }
 
@@ -324,7 +376,8 @@ export class UsersService {
     if (war.targetId !== profile.clanId) {
       throw new Error('Ви не можете прийняти цю війну');
     }
-    if (war.status !== 'PENDING') throw new Error('Війна вже не в статусі очікування');
+    if (war.status !== 'PENDING')
+      throw new Error('Війна вже не в статусі очікування');
 
     return this.prisma.clanWar.update({
       where: { id: warId },
@@ -332,7 +385,7 @@ export class UsersService {
         status: 'ACTIVE',
         startedAt: new Date(),
         durationHours: 48,
-      }
+      },
     });
   }
 
@@ -340,15 +393,17 @@ export class UsersService {
    * Add points to a clan in an active war.
    * Called after a game completes to credit the winning player's clan.
    */
-  async addWarPoints(userId: string, clanId: string, points: number, source: string) {
+  async addWarPoints(
+    userId: string,
+    clanId: string,
+    points: number,
+    source: string,
+  ) {
     // Find an active war involving this clan
     const war = await this.prisma.clanWar.findFirst({
       where: {
         status: 'ACTIVE',
-        OR: [
-          { challengerId: clanId },
-          { targetId: clanId },
-        ],
+        OR: [{ challengerId: clanId }, { targetId: clanId }],
       },
     });
     if (!war) return null;
@@ -387,7 +442,9 @@ export class UsersService {
     const now = new Date();
     for (const war of activeWars) {
       if (!war.startedAt) continue;
-      const endTime = new Date(war.startedAt.getTime() + war.durationHours * 3600 * 1000);
+      const endTime = new Date(
+        war.startedAt.getTime() + war.durationHours * 3600 * 1000,
+      );
       if (now >= endTime) {
         await this.endClanWar(war.id);
       }
@@ -402,7 +459,7 @@ export class UsersService {
     if (!war || war.status !== 'ACTIVE') return null;
 
     let winnerId: string | null = null;
-    let ratingChange = 50 + Math.floor(war.customBet / 10); // Base rating change
+    const ratingChange = 50 + Math.floor(war.customBet / 10); // Base rating change
 
     if (war.challengerScore > war.targetScore) {
       winnerId = war.challengerId;
@@ -424,7 +481,8 @@ export class UsersService {
 
     // Update clan ratings
     if (winnerId) {
-      const loserId = winnerId === war.challengerId ? war.targetId : war.challengerId;
+      const loserId =
+        winnerId === war.challengerId ? war.targetId : war.challengerId;
       await this.prisma.clan.update({
         where: { id: winnerId },
         data: { rating: { increment: ratingChange } },
@@ -436,7 +494,9 @@ export class UsersService {
 
       // Distribute custom bet reward to winner clan leader
       if (war.customBet > 0) {
-        const winnerClan = await this.prisma.clan.findUnique({ where: { id: winnerId } });
+        const winnerClan = await this.prisma.clan.findUnique({
+          where: { id: winnerId },
+        });
         if (winnerClan) {
           await this.prisma.wallet.update({
             where: { userId: winnerClan.ownerId },
@@ -453,22 +513,28 @@ export class UsersService {
     const profile = await this.prisma.profile.findUnique({ where: { userId } });
     if (!profile?.clanId) throw new Error('Ви не у клані');
     if (profile.clanRole !== 'OWNER' && profile.clanRole !== 'OFFICER') {
-      throw new Error('Тільки лідер або офіцери можуть відхиляти/скасовувати війну');
+      throw new Error(
+        'Тільки лідер або офіцери можуть відхиляти/скасовувати війну',
+      );
     }
 
     const war = await this.prisma.clanWar.findUnique({ where: { id: warId } });
     if (!war) throw new Error('Війну не знайдено');
 
     // Either challenger (canceling) or target (rejecting) can reject/cancel a PENDING war
-    if (war.challengerId !== profile.clanId && war.targetId !== profile.clanId) {
+    if (
+      war.challengerId !== profile.clanId &&
+      war.targetId !== profile.clanId
+    ) {
       throw new Error('У вас немає доступу до цієї війни');
     }
 
-    if (war.status !== 'PENDING') throw new Error('Не можна скасувати активну або завершену війну');
+    if (war.status !== 'PENDING')
+      throw new Error('Не можна скасувати активну або завершену війну');
 
     return this.prisma.clanWar.update({
       where: { id: warId },
-      data: { status: 'CANCELLED' }
+      data: { status: 'CANCELLED' },
     });
   }
 
@@ -477,14 +543,18 @@ export class UsersService {
     if (!profile) throw new Error('Профіль не знайдено');
 
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
 
     // Знайдемо активні квести користувача за сьогодні
     let existingQuests = await this.prisma.userQuest.findMany({
       where: {
         profileId: profile.id,
       },
-      include: { quest: true }
+      include: { quest: true },
     });
 
     // Fallback: Date filtering in memory if createdAt does not exist on UserQuest schema
@@ -515,11 +585,35 @@ export class UsersService {
     if (allQuests.length === 0) {
       await this.prisma.quest.createMany({
         data: [
-          { code: 'PLAY_3_MATCHES', title: 'Зіграти 3 матчі', description: 'Зіграйте три гри до кінця.', requirement: 3, rewardSoft: 100 },
-          { code: 'WIN_1_MATCH', title: 'Отримати 1 перемогу', description: 'Виграйте один матч.', requirement: 1, rewardSoft: 50 },
-          { code: 'WIN_AS_MAFIA_1', title: 'Перемогти за Мафію', description: 'Виграйте один матч, граючи за роль Мафії або Дона.', requirement: 1, rewardSoft: 150 },
-          { code: 'PLAY_AS_CITIZEN_2', title: 'Зіграти 2 рази за Мирного', description: 'Отримайте роль Мирного жителя та зіграйте двічі.', requirement: 2, rewardSoft: 80 },
-        ]
+          {
+            code: 'PLAY_3_MATCHES',
+            title: 'Зіграти 3 матчі',
+            description: 'Зіграйте три гри до кінця.',
+            requirement: 3,
+            rewardSoft: 100,
+          },
+          {
+            code: 'WIN_1_MATCH',
+            title: 'Отримати 1 перемогу',
+            description: 'Виграйте один матч.',
+            requirement: 1,
+            rewardSoft: 50,
+          },
+          {
+            code: 'WIN_AS_MAFIA_1',
+            title: 'Перемогти за Мафію',
+            description: 'Виграйте один матч, граючи за роль Мафії або Дона.',
+            requirement: 1,
+            rewardSoft: 150,
+          },
+          {
+            code: 'PLAY_AS_CITIZEN_2',
+            title: 'Зіграти 2 рази за Мирного',
+            description: 'Отримайте роль Мирного жителя та зіграйте двічі.',
+            requirement: 2,
+            rewardSoft: 80,
+          },
+        ],
       });
       allQuests = await this.prisma.quest.findMany();
     }
@@ -529,15 +623,17 @@ export class UsersService {
     const selected = shuffled.slice(0, 3);
 
     const createdQuests = await Promise.all(
-      selected.map(quest => this.prisma.userQuest.create({
-        data: {
-          profileId: profile.id,
-          questId: quest.id,
-          progress: 0,
-          completed: false,
-        },
-        include: { quest: true }
-      }))
+      selected.map((quest) =>
+        this.prisma.userQuest.create({
+          data: {
+            profileId: profile.id,
+            questId: quest.id,
+            progress: 0,
+            completed: false,
+          },
+          include: { quest: true },
+        }),
+      ),
     );
 
     return createdQuests.map((uq: any) => ({
@@ -558,22 +654,24 @@ export class UsersService {
 
     const uq = await this.prisma.userQuest.findUnique({
       where: { id: userQuestId },
-      include: { quest: true }
+      include: { quest: true },
     });
 
-    if (!uq || uq.profileId !== profile.id) throw new Error('Квест не знайдено');
+    if (!uq || uq.profileId !== profile.id)
+      throw new Error('Квест не знайдено');
     if (uq.completed) throw new Error('Нагороду вже отримано');
-    if (uq.progress < uq.quest.requirement) throw new Error('Квест ще не виконано');
+    if (uq.progress < uq.quest.requirement)
+      throw new Error('Квест ще не виконано');
 
     await this.prisma.$transaction([
       this.prisma.userQuest.update({
         where: { id: userQuestId },
-        data: { completed: true, completedAt: new Date() }
+        data: { completed: true, completedAt: new Date() },
       }),
       this.prisma.wallet.update({
         where: { userId },
-        data: { soft: { increment: uq.quest.rewardSoft } }
-      })
+        data: { soft: { increment: uq.quest.rewardSoft } },
+      }),
     ]);
 
     return { success: true, reward: uq.quest.rewardSoft };

@@ -9,7 +9,12 @@ function App() {
   const socket = useAppStore(state => state.socket)
   const isInitializing = useAppStore(state => state.isInitializing)
   const fetchCurrentUser = useAppStore(state => state.fetchCurrentUser)
+  const theme = useAppStore(state => state.theme)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, []);
 
   useEffect(() => {
     fetchCurrentUser();

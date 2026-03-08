@@ -4,9 +4,9 @@ import { TournamentService } from './tournament.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [TournamentController],
-    providers: [TournamentService],
-    exports: [TournamentService],
+  imports: [PrismaModule],
+  controllers: [TournamentController],
+  providers: [TournamentService],
+  exports: [TournamentService],
 })
-export class TournamentModule { }
+export class TournamentModule {}

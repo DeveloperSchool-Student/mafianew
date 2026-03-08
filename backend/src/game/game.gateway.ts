@@ -7,6 +7,7 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Inject, forwardRef, UsePipes, ValidationPipe } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { JwtService } from '@nestjs/jwt';
@@ -14,8 +15,29 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RoleType } from './game.types';
 import { SkipThrottle } from '@nestjs/throttler';
 import { sanitize } from '../utils/sanitize';
-import { getStaffPower } from '../admin/admin.roles';
+import {
+  getStaffPower,
+  STAFF_ROLE_MAP,
+  PERMISSION,
+} from '../admin/admin.roles';
+import { AdminService } from '../admin/admin.service';
+import {
+  CreateRoomDto,
+  RoomIdDto,
+  InviteToRoomDto,
+  ReplyInviteDto,
+  ReadyDto,
+  UpdateRoomSettingsDto,
+  NightActionDto,
+  VoteDto,
+  SaveLastWillDto,
+  PlaceBetDto,
+  WhisperDto,
+  AdminActionDto,
+  ChatMessageDto,
+} from './dto/gateway.dto';
 
+@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 @SkipThrottle()
 @WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN || '*' } })
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -28,14 +50,34 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Rate limiting for room creation: userId -> timestamps[]
   private roomCreationTimestamps: Map<string, number[]> = new Map();
 
+  // Rate limiting for chat: userId -> timestamps[]
+  private chatMessageTimestamps: Map<string, number[]> = new Map();
+
+  // Debouncing for actions/votes: userId -> lastActionTimestamp
+  private actionDebounceTimestamps: Map<string, number> = new Map();
+
   // Global Chat History in RAM
   private globalChatHistory: any[] = [];
+
+  // Online Staff tracking
+  private staffOnline: Map<
+    string,
+    {
+      userId: string;
+      username: string;
+      staffRoleKey: string;
+      staffRoleTitle: string;
+      staffRoleColor: string;
+    }
+  > = new Map();
 
   constructor(
     private readonly gameService: GameService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) { }
+    @Inject(forwardRef(() => AdminService))
+    private readonly adminService: AdminService,
+  ) {}
 
   async handleConnection(client: Socket) {
     try {
@@ -47,6 +89,15 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify(token, {
         secret: process.env.JWT_SECRET || 'super-secret-jwt-key-change-me',
       });
+
+      // Fetch staffRoleKey from DB and attach to socket data
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { staffRoleKey: true, staffRole: true },
+      });
+      payload.staffRoleKey = dbUser?.staffRoleKey || null;
+      payload.staffRoleTitle = dbUser?.staffRole?.title || null;
+      payload.staffRoleColor = dbUser?.staffRole?.color || null;
       client.data.user = payload;
 
       // Evict previous socket for same user from all rooms
@@ -58,12 +109,28 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           oldSocket.rooms.forEach((room) => {
             if (room !== oldSocket.id) oldSocket.leave(room);
           });
-          oldSocket.emit('session_replaced', { message: 'Ваша сесія замінена новою вкладкою.' });
+          oldSocket.emit('session_replaced', {
+            message: 'Ваша сесія замінена новою вкладкою.',
+          });
           oldSocket.disconnect(true);
         }
       }
       this.userSockets.set(payload.sub, client.id);
 
+      // Track online staff
+      if (dbUser?.staffRoleKey && dbUser?.staffRole) {
+        this.staffOnline.set(payload.sub, {
+          userId: payload.sub,
+          username: payload.username,
+          staffRoleKey: dbUser.staffRoleKey,
+          staffRoleTitle: dbUser.staffRole.title,
+          staffRoleColor: dbUser.staffRole.color,
+        });
+        this.server.emit(
+          'staff_online_update',
+          Array.from(this.staffOnline.values()),
+        );
+      }
     } catch (e) {
       client.disconnect();
     }
@@ -74,6 +141,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Only remove mapping if this is still the active socket for this user
     if (userId && this.userSockets.get(userId) === client.id) {
       this.userSockets.delete(userId);
+
+      // Remove from online staff tracking
+      if (this.staffOnline.has(userId)) {
+        this.staffOnline.delete(userId);
+        this.server.emit(
+          'staff_online_update',
+          Array.from(this.staffOnline.values()),
+        );
+      }
+
       this.gameService.handlePlayerDisconnect(
         userId,
         (roomId, event, payload) => {
@@ -85,7 +162,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           } else {
             this.server.to(roomId).emit(event, payload);
           }
-        }
+        },
       );
     }
   }
@@ -94,17 +171,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleCheckActiveGame(@ConnectedSocket() client: Socket) {
     const userId = client.data.user.sub;
     client.emit('global_chat_history', this.globalChatHistory);
-    const activeGameRoomId = await this.gameService.findActiveGameForUser(userId);
+    const activeGameRoomId =
+      await this.gameService.findActiveGameForUser(userId);
 
     if (activeGameRoomId) {
       // Clear any disconnect timer since user is back
-      await this.gameService.handlePlayerReconnect(activeGameRoomId, userId, (roomId, event, payload) => {
-        if (event === 'game_state_update') {
-          this.broadcastGameState(roomId);
-        } else {
-          this.server.to(roomId).emit(event, payload);
-        }
-      });
+      await this.gameService.handlePlayerReconnect(
+        activeGameRoomId,
+        userId,
+        (roomId, event, payload) => {
+          if (event === 'game_state_update') {
+            this.broadcastGameState(roomId);
+          } else {
+            this.server.to(roomId).emit(event, payload);
+          }
+        },
+      );
 
       client.join(activeGameRoomId);
       const filteredState = await this.gameService.getFilteredStateForUser(
@@ -116,7 +198,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    const activeLobbyRoomId = await this.gameService.findActiveLobbyForUser(userId);
+    const activeLobbyRoomId =
+      await this.gameService.findActiveLobbyForUser(userId);
     if (activeLobbyRoomId) {
       client.join(activeLobbyRoomId);
       const room = await this.gameService.getRoom(activeLobbyRoomId);
@@ -129,13 +212,17 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('create_room')
-  async handleCreateRoom(@ConnectedSocket() client: Socket) {
+  async handleCreateRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: CreateRoomDto,
+  ) {
+    const type = data?.type || 'CASUAL';
     const user = client.data.user;
 
     // Rate limit: max 3 rooms per minute per user
     const now = Date.now();
     const timestamps = this.roomCreationTimestamps.get(user.sub) || [];
-    const recent = timestamps.filter(t => now - t < 60000);
+    const recent = timestamps.filter((t) => now - t < 60000);
     if (recent.length >= 3) {
       client.emit('error', 'Занадто багато кімнат. Спробуйте через хвилину.');
       return;
@@ -143,34 +230,73 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     recent.push(now);
     this.roomCreationTimestamps.set(user.sub, recent);
 
-    const roomId = await this.gameService.createRoom(user.sub, user.username);
-    client.join(roomId);
-    const room = await this.gameService.getRoom(roomId);
-    this.server.to(roomId).emit('room_updated', room);
-    client.emit('room_created', { roomId });
+    try {
+      const roomId = await this.gameService.createRoom(
+        user.sub,
+        user.username,
+        type,
+      );
+      client.join(roomId);
+      const room = await this.gameService.getRoom(roomId);
+      this.server.to(roomId).emit('room_updated', room);
+      client.emit('room_created', { roomId });
+    } catch (e: any) {
+      client.emit('error', e.message || 'Error creating room');
+    }
   }
 
   @SubscribeMessage('join_room')
   async handleJoinRoom(
-    @MessageBody('roomId') roomId: string,
+    @MessageBody() data: RoomIdDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const roomId = data.roomId;
     const user = client.data.user;
-    const room = await this.gameService.joinRoom(roomId, user.sub, user.username);
-    if (!room) {
-      client.emit('error', 'Room not found');
-      return;
+    try {
+      const result = await this.gameService.joinRoom(
+        roomId,
+        user.sub,
+        user.username,
+      );
+      if (!result) {
+        client.emit('error', 'Цієї кімнати не існує або гра вже завершилась.');
+        return;
+      }
+      const { room, warnings } = result;
+
+      if (warnings && warnings.length > 0) {
+        // Notify admins
+        warnings.forEach((warn) => {
+          for (const [
+            socketId,
+            socket,
+          ] of this.server.sockets.sockets.entries()) {
+            const socketUser = socket.data.user;
+            if (
+              socketUser &&
+              socketUser.staffRoleKey &&
+              getStaffPower(socketUser.staffRoleKey) > 0
+            ) {
+              socket.emit('system_chat', `[АНТИЧІТ] ${warn}`);
+            }
+          }
+        });
+      }
+
+      client.join(roomId);
+      this.server.to(roomId).emit('room_updated', room);
+      client.emit('room_joined', room);
+    } catch (e: any) {
+      client.emit('error', e.message || 'Помилка приєднання до кімнати.');
     }
-    client.join(roomId);
-    this.server.to(roomId).emit('room_updated', room);
-    client.emit('room_joined', room);
   }
 
   @SubscribeMessage('leave_room')
   async handleLeaveRoom(
-    @MessageBody('roomId') roomId: string,
+    @MessageBody() data: RoomIdDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const roomId = data.roomId;
     const userId = client.data.user.sub;
     const room = await this.gameService.leaveRoom(roomId, userId);
     client.leave(roomId);
@@ -181,7 +307,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('invite_to_room')
   async handleInviteToRoom(
-    @MessageBody() data: { targetUserId: string; roomId: string },
+    @MessageBody() data: InviteToRoomDto,
     @ConnectedSocket() client: Socket,
   ) {
     const inviterUsername = client.data.user.username;
@@ -199,7 +325,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('ready')
   async handleReady(
-    @MessageBody() data: { roomId: string; isReady: boolean },
+    @MessageBody() data: ReadyDto,
     @ConnectedSocket() client: Socket,
   ) {
     const root = await this.gameService.setPlayerReady(
@@ -214,7 +340,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('update_room_settings')
   async handleUpdateRoomSettings(
-    @MessageBody() data: { roomId: string; settings: any },
+    @MessageBody() data: UpdateRoomSettingsDto,
     @ConnectedSocket() client: Socket,
   ) {
     const success = await this.gameService.updateRoomSettings(
@@ -246,9 +372,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('start_game')
   async handleStartGame(
-    @MessageBody('roomId') roomId: string,
+    @MessageBody() data: RoomIdDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const roomId = data.roomId;
     try {
       const emitCb = (rId: string, event: string, payload?: any) => {
         if (event === 'private_action_result') {
@@ -274,7 +401,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       };
 
-      const state = await this.gameService.startGame(roomId, client.data.user.sub, emitCb);
+      const state = await this.gameService.startGame(
+        roomId,
+        client.data.user.sub,
+        emitCb,
+      );
       if (state) {
         const room = await this.gameService.getRoom(roomId);
         this.server.to(roomId).emit('room_updated', room);
@@ -287,13 +418,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('night_action')
   async handleNightAction(
-    @MessageBody()
-    data: { roomId: string; targetId: string; actionType: string },
+    @MessageBody() data: NightActionDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const userId = client.data?.user?.sub;
+    if (!userId) return;
+
+    const now = Date.now();
+    const lastAction = this.actionDebounceTimestamps.get(userId) || 0;
+    if (now - lastAction < 1000) return;
+    this.actionDebounceTimestamps.set(userId, now);
+
     const success = await this.gameService.handleNightAction(
       data.roomId,
-      client.data.user.sub,
+      userId,
       data.targetId,
       data.actionType,
     );
@@ -306,12 +444,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('vote')
   async handleVote(
-    @MessageBody() data: { roomId: string; targetId: string },
+    @MessageBody() data: VoteDto,
     @ConnectedSocket() client: Socket,
   ) {
+    const userId = client.data?.user?.sub;
+    if (!userId) return;
+
+    const now = Date.now();
+    const lastVote = this.actionDebounceTimestamps.get(userId) || 0;
+    if (now - lastVote < 1000) return;
+    this.actionDebounceTimestamps.set(userId, now);
+
     const success = await this.gameService.handleVote(
       data.roomId,
-      client.data.user.sub,
+      userId,
       data.targetId,
     );
     if (success) {
@@ -327,7 +473,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('save_last_will')
   async handleSaveLastWill(
-    @MessageBody() data: { roomId: string; lastWill: string },
+    @MessageBody() data: SaveLastWillDto,
     @ConnectedSocket() client: Socket,
   ) {
     const state = await this.gameService.getGameState(data.roomId);
@@ -342,21 +488,29 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('place_bet')
   async handlePlaceBet(
-    @MessageBody() data: { roomId: string; faction: string; amount: number },
+    @MessageBody() data: PlaceBetDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const result = await this.gameService.placeBet(data.roomId, client.data.user.sub, data.faction, data.amount);
+    const result = await this.gameService.placeBet(
+      data.roomId,
+      client.data.user.sub,
+      data.faction,
+      data.amount,
+    );
     if (!result.success) {
       client.emit('error', result.error);
     } else {
-      client.emit('system_chat', `Ставку ${data.amount} монет на фракцію "${data.faction}" прийнято.`);
+      client.emit(
+        'system_chat',
+        `Ставку ${data.amount} монет на фракцію "${data.faction}" прийнято.`,
+      );
       this.broadcastGameState(data.roomId);
     }
   }
 
   @SubscribeMessage('whisper')
   async handleWhisper(
-    @MessageBody() data: { roomId: string; targetId: string; message: string },
+    @MessageBody() data: WhisperDto,
     @ConnectedSocket() client: Socket,
   ) {
     data.message = sanitize(data.message, 200);
@@ -367,20 +521,46 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data.targetId,
       data.message,
       (userId, event, payload) => {
-        this.server.in(data.roomId).fetchSockets().then((sockets) => {
-          const s = sockets.find((sock) => sock.data.user.sub === userId);
-          if (s) s.emit(event, payload);
-        });
-      }
+        this.server
+          .in(data.roomId)
+          .fetchSockets()
+          .then((sockets) => {
+            const s = sockets.find((sock) => sock.data.user.sub === userId);
+            if (s) s.emit(event, payload);
+          });
+      },
     );
     if (!success) {
-      client.emit('error', 'Не вдалося надіслати шепіт (перевірте баланс або ціль).');
+      client.emit(
+        'error',
+        'Не вдалося надіслати шепіт (перевірте баланс або ціль).',
+      );
+    }
+  }
+
+  @SubscribeMessage('use_veto')
+  async handleUseVeto(
+    @MessageBody() data: RoomIdDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const roomId = data.roomId;
+    const success = await this.gameService.handleMayorVeto(
+      roomId,
+      client.data.user.sub,
+      (rId: string, ev: string, payload?: any) => {
+        this.server.to(rId).emit(ev, payload);
+      },
+    );
+    if (!success) {
+      client.emit('error', 'Ви не можете використати Вето зараз.');
+    } else {
+      this.broadcastGameState(roomId);
     }
   }
 
   @SubscribeMessage('admin_action')
   async handleAdminAction(
-    @MessageBody() data: { targetUsername: string; action: 'KICK' | 'BAN' | 'MUTE' },
+    @MessageBody() data: AdminActionDto,
     @ConnectedSocket() client: Socket,
   ) {
     if (client.data.user.username !== 'ADMIN') return;
@@ -405,11 +585,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
             s.disconnect(true);
           }
         });
-      }
+      },
     );
 
     if (success) {
-      client.emit('system_chat', `Команду ${data.action} успішно застосовано до ${data.targetUsername}.`);
+      client.emit(
+        'system_chat',
+        `Команду ${data.action} успішно застосовано до ${data.targetUsername}.`,
+      );
     } else {
       client.emit('error', 'Не вдалося виконати дію адміністратора.');
     }
@@ -417,7 +600,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('chat_message')
   async handleChatMessage(
-    @MessageBody() data: { roomId: string; message: string },
+    @MessageBody() data: ChatMessageDto,
     @ConnectedSocket() client: Socket,
   ) {
     if (!data || !data.roomId || !data.message) return;
@@ -427,6 +610,19 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sub = client.data?.user?.sub;
 
     if (!sub) return;
+
+    const now = Date.now();
+    const timestamps = this.chatMessageTimestamps.get(sub) || [];
+    const recent = timestamps.filter((t) => now - t < 10000);
+    if (recent.length >= 5) {
+      client.emit(
+        'error',
+        'Ви відправляєте повідомлення занадто часто (макс 5 на 10 сек).',
+      );
+      return;
+    }
+    recent.push(now);
+    this.chatMessageTimestamps.set(sub, recent);
 
     // Перевірка на mute (глобальний)
     const profile = await this.prisma.profile.findUnique({
@@ -439,23 +635,28 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (!state) {
       // Lobby Chat
-      if (data.message === '/clear') {
-        const userRoleKey = client.data?.user?.staffRoleKey;
-        const power = getStaffPower(userRoleKey);
-        if (power >= 4) {
-          this.globalChatHistory = [];
-          this.server.emit('chat_cleared');
-        } else {
-          client.emit('error', 'Вам недоступна ця команда.');
-        }
-        return;
+
+      // ── Admin commands in lobby chat ──
+      if (data.message.startsWith('/')) {
+        const handled = await this.handleAdminCommand(
+          client,
+          data.message,
+          null,
+        );
+        if (handled) return;
       }
+
+      const userRoleKey = client.data?.user?.staffRoleKey;
+      const staffRole = userRoleKey ? STAFF_ROLE_MAP.get(userRoleKey) : null;
 
       const msgObj = {
         id: Date.now().toString() + Math.random().toString().substring(2, 6),
         sender: username,
         text: data.message,
         timestamp: new Date().toISOString(),
+        staffRoleKey: userRoleKey || null,
+        staffRoleTitle: staffRole?.title || null,
+        staffRoleColor: staffRole?.color || null,
       };
 
       this.globalChatHistory.push(msgObj);
@@ -497,6 +698,19 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    // ── Admin commands in game chat ──
+    if (data.message.startsWith('/')) {
+      const handled = await this.handleAdminCommand(
+        client,
+        data.message,
+        data.roomId,
+      );
+      if (handled) return;
+    }
+
+    const userRoleKey = client.data?.user?.staffRoleKey;
+    const staffRole = userRoleKey ? STAFF_ROLE_MAP.get(userRoleKey) : null;
+
     if (state.phase === 'NIGHT') {
       // Night chat is only for Mafias
       if (player.role === RoleType.MAFIA || player.role === RoleType.DON) {
@@ -518,6 +732,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   sender: username,
                   text: data.message,
                   type: 'mafia',
+                  staffRoleKey: userRoleKey || null,
+                  staffRoleTitle: staffRole?.title || null,
+                  staffRoleColor: staffRole?.color || null,
                 });
               }
             });
@@ -531,6 +748,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         sender: username,
         text: data.message,
         type: 'general',
+        staffRoleKey: userRoleKey || null,
+        staffRoleTitle: staffRole?.title || null,
+        staffRoleColor: staffRole?.color || null,
       });
     }
   }
@@ -601,13 +821,257 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.join(roomId);
 
     // Send game state
-    const filteredState = await this.gameService.getFilteredStateForUser(roomId, user.sub);
+    const filteredState = await this.gameService.getFilteredStateForUser(
+      roomId,
+      user.sub,
+    );
     client.emit('game_state_update', filteredState);
     client.emit('room_joined', room);
   }
 
+  /* ═══════════════════  ADMIN COMMANDS IN CHAT  ═══════════════════ */
+
+  /**
+   * Parse and handle admin commands: /mute, /kick, /ban, /warn, /clear
+   * Returns true if the message was a valid admin command (handled), false otherwise.
+   */
+  private async handleAdminCommand(
+    client: Socket,
+    message: string,
+    roomId: string | null,
+  ): Promise<boolean> {
+    const staffRoleKey = client.data?.user?.staffRoleKey;
+    const power = getStaffPower(staffRoleKey);
+    const parts = message.trim().split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+
+    // /addbot <count> — додати ботів для тестування (Lv.9 Owner)
+    if (cmd === '/addbot') {
+      if (power < 9) {
+        client.emit('error', 'Тільки Власник (Lv.9) може додавати ботів.');
+        return true;
+      }
+      if (!roomId) {
+        client.emit(
+          'error',
+          'Цю команду можна використовувати тільки в кімнаті.',
+        );
+        return true;
+      }
+      const count = parseInt(parts[1], 10) || 1;
+      try {
+        const room = await this.gameService.addBots(roomId, count);
+        if (room) {
+          this.server.to(roomId).emit('room_updated', room);
+          this.server
+            .to(roomId)
+            .emit(
+              'system_chat',
+              `🤖 Адміністратор додав ${count} бот(ів) для тестування.`,
+            );
+        } else {
+          client.emit('error', 'Кімнату не знайдено або гра вже почалася.');
+        }
+      } catch (e: any) {
+        client.emit('error', e.message || 'Помилка виконання /addbot.');
+      }
+      return true;
+    }
+
+    // /clear — clear global chat (Lv.4+)
+    if (cmd === '/clear') {
+      if (power >= 4) {
+        this.globalChatHistory = [];
+        this.server.emit('chat_cleared');
+        client.emit('system_chat', '✅ Чат очищено.');
+      } else {
+        client.emit('error', 'Вам недоступна ця команда.');
+      }
+      return true;
+    }
+
+    // /warn <ім'я> <причина> — попередити (Lv.1+)
+    if (cmd === '/warn') {
+      if (power < PERMISSION.PUNISH_WARN) {
+        client.emit('error', 'Недостатньо прав для /warn (Lv.1+).');
+        return true;
+      }
+      const targetName = parts[1];
+      const reason = parts.slice(2).join(' ') || 'Порушення правил';
+      if (!targetName) {
+        client.emit('error', "Формат: /warn <ім'я> <причина>");
+        return true;
+      }
+      try {
+        await this.adminService.punishUser(
+          { id: client.data.user.sub, staffRoleKey },
+          { targetUsername: targetName, type: 'WARN', reason },
+        );
+        client.emit(
+          'system_chat',
+          `✅ Попередження видано гравцю ${targetName}.`,
+        );
+        if (roomId) {
+          this.server
+            .to(roomId)
+            .emit(
+              'system_chat',
+              `⚠️ Гравець ${targetName} отримав попередження від адміністратора.`,
+            );
+        }
+      } catch (e: any) {
+        client.emit('error', e.message || 'Помилка виконання /warn.');
+      }
+      return true;
+    }
+
+    // /mute <ім'я> <хвилини> — замутити (Lv.2+)
+    if (cmd === '/mute') {
+      if (power < PERMISSION.PUNISH_MUTE) {
+        client.emit('error', 'Недостатньо прав для /mute (Lv.2+).');
+        return true;
+      }
+      const targetName = parts[1];
+      const minutes = parseInt(parts[2], 10) || 30;
+      if (!targetName) {
+        client.emit('error', "Формат: /mute <ім'я> <хвилини>");
+        return true;
+      }
+      try {
+        await this.adminService.punishUser(
+          { id: client.data.user.sub, staffRoleKey },
+          {
+            targetUsername: targetName,
+            type: 'MUTE',
+            durationSeconds: minutes * 60,
+            reason: `Мут через чат-команду (${minutes} хв)`,
+          },
+        );
+        client.emit(
+          'system_chat',
+          `✅ Гравця ${targetName} замучено на ${minutes} хв.`,
+        );
+        if (roomId) {
+          this.server
+            .to(roomId)
+            .emit(
+              'system_chat',
+              `🔇 Гравець ${targetName} замучений на ${minutes} хв адміністратором.`,
+            );
+        }
+      } catch (e: any) {
+        client.emit('error', e.message || 'Помилка виконання /mute.');
+      }
+      return true;
+    }
+
+    // /kick <ім'я> — кікнути (Lv.3+)
+    if (cmd === '/kick') {
+      if (power < PERMISSION.PUNISH_KICK) {
+        client.emit('error', 'Недостатньо прав для /kick (Lv.3+).');
+        return true;
+      }
+      const targetName = parts[1];
+      if (!targetName) {
+        client.emit('error', "Формат: /kick <ім'я>");
+        return true;
+      }
+      try {
+        await this.adminService.punishUser(
+          { id: client.data.user.sub, staffRoleKey },
+          {
+            targetUsername: targetName,
+            type: 'KICK',
+            reason: 'Кік через чат-команду',
+          },
+        );
+        // If in a room, find and kick from socket room
+        if (roomId) {
+          const target = await this.prisma.user.findUnique({
+            where: { username: targetName },
+            select: { id: true },
+          });
+          if (target) {
+            const sockets = await this.server.in(roomId).fetchSockets();
+            const targetSock = sockets.find(
+              (s) => s.data?.user?.sub === target.id,
+            );
+            if (targetSock) {
+              targetSock.leave(roomId);
+              targetSock.emit('kicked_from_room', {
+                roomId,
+                reason: 'Вас кікнуто адміністратором.',
+              });
+            }
+          }
+          this.server
+            .to(roomId)
+            .emit(
+              'system_chat',
+              `🚪 Гравець ${targetName} кікнутий адміністратором.`,
+            );
+        }
+        client.emit('system_chat', `✅ Гравця ${targetName} кікнуто.`);
+      } catch (e: any) {
+        client.emit('error', e.message || 'Помилка виконання /kick.');
+      }
+      return true;
+    }
+
+    // /ban <ім'я> <години> — забанити (Lv.4+)
+    if (cmd === '/ban') {
+      if (power < PERMISSION.PUNISH_BAN) {
+        client.emit('error', 'Недостатньо прав для /ban (Lv.4+).');
+        return true;
+      }
+      const targetName = parts[1];
+      const hours = parseInt(parts[2], 10) || 24;
+      if (!targetName) {
+        client.emit('error', "Формат: /ban <ім'я> <години>");
+        return true;
+      }
+      try {
+        await this.adminService.punishUser(
+          { id: client.data.user.sub, staffRoleKey },
+          {
+            targetUsername: targetName,
+            type: 'BAN',
+            durationSeconds: hours * 3600,
+            reason: `Бан через чат-команду (${hours} год)`,
+          },
+        );
+        client.emit(
+          'system_chat',
+          `✅ Гравця ${targetName} забанено на ${hours} год.`,
+        );
+        if (roomId) {
+          this.server
+            .to(roomId)
+            .emit(
+              'system_chat',
+              `🚫 Гравець ${targetName} забанений на ${hours} год адміністратором.`,
+            );
+        }
+      } catch (e: any) {
+        client.emit('error', e.message || 'Помилка виконання /ban.');
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  /* ═══════════════════  GET ONLINE STAFF (public) ═══════════════════ */
+
+  getOnlineStaff() {
+    return Array.from(this.staffOnline.values());
+  }
+
   /* ═══════════════════  ONLINE MATCHMAKING  ═══════════════════ */
-  private onlineQueue: Map<string, { userId: string; username: string; socketId: string }> = new Map();
+  private onlineQueue: Map<
+    string,
+    { userId: string; username: string; socketId: string }
+  > = new Map();
   private readonly MIN_PLAYERS_ONLINE = 5;
   private readonly MAX_PLAYERS_ONLINE = 20;
   private onlineMatchTimer: NodeJS.Timeout | null = null;
@@ -648,14 +1112,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.onlineQueue.delete(userId);
 
       // If we dip below minimum players, stop the timer
-      if (this.onlineQueue.size < this.MIN_PLAYERS_ONLINE && this.onlineMatchTimer) {
+      if (
+        this.onlineQueue.size < this.MIN_PLAYERS_ONLINE &&
+        this.onlineMatchTimer
+      ) {
         clearInterval(this.onlineMatchTimer);
         this.onlineMatchTimer = null;
         this.matchTimerCountdown = 0;
       }
 
       this.broadcastQueueUpdate();
-      client.emit('online_queue_update', { inQueue: this.onlineQueue.size, left: true });
+      client.emit('online_queue_update', {
+        inQueue: this.onlineQueue.size,
+        left: true,
+      });
     }
   }
 
@@ -680,15 +1150,25 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async startOnlineMatch() {
-    const players = Array.from(this.onlineQueue.values()).slice(0, this.MAX_PLAYERS_ONLINE);
+    const players = Array.from(this.onlineQueue.values()).slice(
+      0,
+      this.MAX_PLAYERS_ONLINE,
+    );
 
     // Create room with the first player as host
     const host = players[0];
-    const roomId = await this.gameService.createRoom(host.userId, host.username);
+    const roomId = await this.gameService.createRoom(
+      host.userId,
+      host.username,
+    );
 
     // Join all other players
     for (let i = 1; i < players.length; i++) {
-      await this.gameService.joinRoom(roomId, players[i].userId, players[i].username);
+      await this.gameService.joinRoom(
+        roomId,
+        players[i].userId,
+        players[i].username,
+      );
     }
 
     // Remove from queue and notify
@@ -720,7 +1200,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       inQueue: this.onlineQueue.size,
       timer: this.onlineMatchTimer ? this.matchTimerCountdown : null,
       minPlayers: this.MIN_PLAYERS_ONLINE,
-      maxPlayers: this.MAX_PLAYERS_ONLINE
+      maxPlayers: this.MAX_PLAYERS_ONLINE,
     };
 
     // Send only to users in queue

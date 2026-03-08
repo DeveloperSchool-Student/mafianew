@@ -4,6 +4,7 @@ export enum GamePhase {
   NIGHT = 'NIGHT',
   DAY_DISCUSSION = 'DAY_DISCUSSION',
   DAY_VOTING = 'DAY_VOTING',
+  MAYOR_VETO = 'MAYOR_VETO',
   COURT = 'COURT',
   EXECUTION = 'EXECUTION',
   END_GAME = 'END_GAME',
@@ -41,9 +42,13 @@ export interface PlayerState {
   disconnectTimer?: NodeJS.Timeout | null;
   lastWill?: string;
   isSpectator?: boolean;
+  isBot?: boolean;
   afkPhasesCount?: number;
   isSilenced?: boolean;
   isOnline?: boolean;
+  staffRoleKey?: string | null;
+  staffRoleTitle?: string | null;
+  staffRoleColor?: string | null;
 }
 
 export interface MatchLog {
@@ -62,12 +67,22 @@ export interface GameState {
   votes: Map<string, string>;
   bets: Map<string, { faction: string; amount: number }>;
   logs: MatchLog[];
+  mayorVetoUsed?: boolean;
+  pendingExecutionId?: string | null;
 }
 
 export interface Room {
   id: string;
   hostId: string;
-  players: { userId: string; username: string; isReady: boolean; level?: number; avatarUrl?: string }[];
+  type?: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
+  players: {
+    userId: string;
+    username: string;
+    isReady: boolean;
+    level?: number;
+    avatarUrl?: string;
+    isBot?: boolean;
+  }[];
   status: 'WAITING_LOBBY' | 'IN_PROGRESS';
   settings?: {
     dayTimerMs: number;

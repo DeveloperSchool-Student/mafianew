@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import axios from 'axios';
-import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords } from 'lucide-react';
+import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords, Calendar } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TITLES } from '../constants/titles';
 
@@ -31,7 +31,7 @@ function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events';
+type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events' | 'stats' | 'seasons';
 
 export function AdminPage() {
     const { user } = useAppStore();
@@ -58,6 +58,8 @@ export function AdminPage() {
         { key: 'leaders', label: 'Лідери', icon: Award, minPower: 8 },
         { key: 'logs', label: t('admin.logs'), icon: Activity, minPower: 7 },
         { key: 'duties', label: 'Обов\'язки', icon: FileText, minPower: 1 },
+        { key: 'stats', label: 'Статистика', icon: Activity, minPower: 7 },
+        { key: 'seasons', label: 'Сезони', icon: Calendar, minPower: 8 },
         { key: 'events', label: 'Івенти', icon: Gift, minPower: 9 },
     ];
 
@@ -120,6 +122,8 @@ export function AdminPage() {
                     {tab === 'leaders' && <LeadersTab token={user.token} />}
                     {tab === 'logs' && <LogsTab token={user.token} myPower={myPower} onUserAction={(username) => { setActionTarget(username); setTab('users'); }} />}
                     {tab === 'duties' && <DutiesTab />}
+                    {tab === 'stats' && <StatsTab token={user.token} />}
+                    {tab === 'seasons' && <SeasonsTab token={user.token} />}
                     {tab === 'events' && <EventsTab token={user.token} />}
                 </main>
             </div>
@@ -314,27 +318,34 @@ const PUNISH_TEMPLATES = [
 
 function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: string; myPower: number; actionTarget: string; setActionTarget: (u: string) => void }) {
     const [users, setUsers] = useState<any[]>([]);
+    const [cursor, setCursor] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [actionType, setActionType] = useState<'PUNISH' | 'GOLD' | 'EXP' | 'NICK' | 'DELETE'>('PUNISH');
     const [templateIndex, setTemplateIndex] = useState(0);
-    const [punishType, setPunishType] = useState<'KICK' | 'BAN' | 'MUTE'>('KICK');
+    const [punishType, setPunishType] = useState<'KICK' | 'BAN' | 'MUTE' | 'WARN'>('KICK');
     const [duration, setDuration] = useState(3600);
     const [reason, setReason] = useState('');
     const [delta, setDelta] = useState(100);
     const [newNick, setNewNick] = useState('');
     const { t } = useTranslation();
 
-    const load = async () => {
+    const load = async (reset = false) => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/users`, headers(token));
-            setUsers(res.data);
+            const currentCursor = reset ? null : cursor;
+            const res = await axios.get(`${API_URL}/admin/users?limit=50${currentCursor ? `&cursor=${currentCursor}` : ''}`, headers(token));
+            if (reset) {
+                setUsers(res.data.data);
+            } else {
+                setUsers(prev => [...prev, ...res.data.data]);
+            }
+            setCursor(res.data.nextCursor);
         } catch { }
         setLoading(false);
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(true); }, []);
 
     const filtered = search ? users.filter(u => u.username.toLowerCase().includes(search.toLowerCase())) : users;
 
@@ -344,7 +355,7 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
             if (actionType === 'PUNISH') {
                 await axios.post(`${API_URL}/admin/punish`, {
                     targetUsername: actionTarget, type: punishType,
-                    durationSeconds: punishType === 'KICK' ? undefined : duration,
+                    durationSeconds: (punishType === 'KICK' || punishType === 'WARN') ? undefined : duration,
                     scope: 'GLOBAL', reason: reason || undefined,
                 }, headers(token));
             } else if (actionType === 'GOLD') {
@@ -358,7 +369,7 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                 await axios.post(`${API_URL}/admin/delete-user`, { targetUsername: actionTarget }, headers(token));
             }
             alert(`✅ ${t('common.success')}`);
-            load();
+            load(true);
         } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
     };
 
@@ -410,6 +421,13 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                             })}
                     </tbody>
                 </table>
+                {cursor && (
+                    <div className="flex justify-center py-4">
+                        <button onClick={() => load(false)} className="text-sm bg-[#1a1a1a] border border-gray-700 hover:bg-[#2a2a2a] text-white px-4 py-2 rounded transition">
+                            {loading ? t('common.loading') : 'Завантажити ще'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Action Panel */}
@@ -454,6 +472,7 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
 
                             <div className="grid grid-cols-2 gap-3 mb-3">
                                 <select value={punishType} onChange={e => { setPunishType(e.target.value as any); setTemplateIndex(0); }} className="bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm">
+                                    <option value="WARN">⚠️ Warn</option>
                                     <option value="KICK">Kick</option>
                                     <option value="BAN">Ban</option>
                                     <option value="MUTE">Mute</option>
@@ -505,7 +524,9 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
    STAFF TAB
    ═══════════════════════════════════════════════════════════ */
 function StaffTab({ token, myPower }: { token: string; myPower: number }) {
+    const { socket } = useAppStore();
     const [staff, setStaff] = useState<any[]>([]);
+    const [onlineStaff, setOnlineStaff] = useState<any[]>([]);
     const [newStaffUsername, setNewStaffUsername] = useState('');
     const [newStaffRole, setNewStaffRole] = useState('TRAINEE');
     const [loading, setLoading] = useState(false);
@@ -521,6 +542,16 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
     };
 
     useEffect(() => { load(); }, []);
+
+    // Listen for online staff updates
+    useEffect(() => {
+        if (!socket) return;
+        const handleStaffOnline = (data: any[]) => {
+            setOnlineStaff(data);
+        };
+        socket.on('staff_online_update', handleStaffOnline);
+        return () => { socket.off('staff_online_update', handleStaffOnline); };
+    }, [socket]);
 
     const assignRole = async () => {
         if (!newStaffUsername) return;
@@ -542,9 +573,37 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
 
     const availableRoles = STAFF_ROLES.filter(r => r.power < myPower || myPower >= 9);
 
+    // Build set of online user IDs for quick lookup
+    const onlineIds = new Set(onlineStaff.map(s => s.userId));
+
     return (
         <div>
             <h2 className="text-xl sm:text-2xl font-bold mb-6">🛡️ {t('admin.staff')}</h2>
+
+            {/* Online Staff Dashboard */}
+            <div className="mb-8 bg-[#111] border border-gray-700 rounded-xl p-4">
+                <h3 className="font-bold mb-3 text-gray-200 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Зараз онлайн ({onlineStaff.length})
+                </h3>
+                {onlineStaff.length === 0 ? (
+                    <p className="text-gray-500 text-sm">Немає адміністраторів онлайн.</p>
+                ) : (
+                    <div className="flex flex-wrap gap-2">
+                        {onlineStaff.map(s => (
+                            <div key={s.userId} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1a1a1a] border border-gray-800">
+                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span className="text-sm font-medium" style={{ color: s.staffRoleColor }}>{s.username}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
+                                    color: s.staffRoleColor,
+                                    backgroundColor: s.staffRoleColor + '22',
+                                    border: `1px solid ${s.staffRoleColor}55`,
+                                }}>{s.staffRoleTitle}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Existing staff */}
             <div className="space-y-2 mb-8">
@@ -552,11 +611,15 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
                     staff.length === 0 ? <p className="text-gray-500">{t('admin.no_staff')}</p> :
                         staff.map(s => {
                             const roleInfo = s.staffRole || STAFF_ROLES.find(r => r.key === s.staffRoleKey);
+                            const isOnline = onlineIds.has(s.id);
                             return (
                                 <div key={s.id} className="flex items-center justify-between bg-[#1a1a1a] border border-gray-800 p-3 rounded">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: `${roleInfo?.color}22`, color: roleInfo?.color }}>
-                                            {s.username.charAt(0).toUpperCase()}
+                                        <div className="relative">
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: `${roleInfo?.color}22`, color: roleInfo?.color }}>
+                                                {s.username.charAt(0).toUpperCase()}
+                                            </div>
+                                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#1a1a1a] ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`}></span>
                                         </div>
                                         <div>
                                             <span className="font-medium" style={{ color: roleInfo?.color }}>{s.username}</span>
@@ -615,20 +678,27 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
    ═══════════════════════════════════════════════════════════ */
 function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
     const [logs, setLogs] = useState<any[]>([]);
+    const [cursor, setCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [clearDays, setClearDays] = useState<number | 'all'>(7);
     const { t } = useTranslation();
 
-    const load = async () => {
+    const load = async (reset = false) => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/logs`, headers(token));
-            setLogs(res.data);
+            const currentCursor = reset ? null : cursor;
+            const res = await axios.get(`${API_URL}/admin/logs?limit=50${currentCursor ? `&cursor=${currentCursor}` : ''}`, headers(token));
+            if (reset) {
+                setLogs(res.data.data);
+            } else {
+                setLogs(prev => [...prev, ...res.data.data]);
+            }
+            setCursor(res.data.nextCursor);
         } catch { }
         setLoading(false);
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(true); }, []);
 
     const handleClearLogs = async () => {
         const label = clearDays === 'all' ? 'ВСІ логи' : `логи старші за ${clearDays} днів`;
@@ -638,7 +708,7 @@ function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: num
             if (clearDays !== 'all') body.olderThanDays = clearDays;
             const res = await axios.post(`${API_URL}/admin/logs/clear`, body, headers(token));
             alert(`✅ Видалено ${res.data.deleted} записів`);
-            load();
+            load(true);
         } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
     };
 
@@ -681,6 +751,13 @@ function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: num
                             <span className="text-xs text-gray-600 whitespace-nowrap">{new Date(l.createdAt).toLocaleString('uk-UA')}</span>
                         </div>
                     ))}
+                    {cursor && (
+                        <div className="flex justify-center py-4">
+                            <button onClick={() => load(false)} className="text-sm bg-[#1a1a1a] border border-gray-700 hover:bg-[#2a2a2a] text-white px-4 py-2 rounded transition">
+                                {loading ? t('common.loading') : 'Завантажити ще'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -1117,6 +1194,187 @@ function ClanWarsTab({ token }: { token: string }) {
                                     <p className="text-sm text-green-400 font-bold">Завершено! Переможець: {w.winnerId === w.challengerId ? w.challenger?.name : (w.winnerId === w.targetId ? w.target?.name : 'Нічия')}</p>
                                 </div>
                             )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATS TAB
+   ═══════════════════════════════════════════════════════════ */
+function StatsTab({ token }: { token: string }) {
+    const [stats, setStats] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/stats`, headers(token));
+            setStats(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, []);
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+                    <Activity size={24} /> Глобальна Статистика
+                </h2>
+                <button onClick={load} className="text-sm bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded transition">
+                    Оновити
+                </button>
+            </div>
+
+            {loading ? <p className="text-gray-500">Завантаження...</p> : !stats ? <p className="text-red-500">Не вдалося завантажити статистику.</p> : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-[#1a1a1a] border border-gray-800 p-4 rounded text-center">
+                        <Users className="mx-auto mb-2 text-mafia-light" size={24} />
+                        <h3 className="text-sm text-gray-400">Всього гравців</h3>
+                        <p className="text-3xl font-bold">{stats.totalUsers}</p>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border border-gray-800 p-4 rounded text-center border-t-4 border-t-green-500">
+                        <Activity className="mx-auto mb-2 text-green-500" size={24} />
+                        <h3 className="text-sm text-green-400">Онлайн зараз</h3>
+                        <p className="text-3xl font-bold text-white">{stats.online}</p>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border border-gray-800 p-4 rounded">
+                        <h3 className="text-sm text-gray-400 mb-4 border-b border-gray-700 pb-2">Зіграно ігор</h3>
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">Сьогодні</span>
+                                <span className="font-bold text-yellow-500">{stats.matches.today}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">За тиждень</span>
+                                <span className="font-bold text-yellow-500">{stats.matches.week}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">За місяць</span>
+                                <span className="font-bold text-yellow-500">{stats.matches.month}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-[#1a1a1a] border border-gray-800 p-4 rounded col-span-1 sm:col-span-2 lg:col-span-3">
+                        <h3 className="text-sm text-gray-400 mb-4 border-b border-gray-700 pb-2 text-center">Найпопулярніші Ролі (за весь час)</h3>
+                        {stats.popularRoles.length === 0 ? (
+                            <p className="text-gray-500 text-center text-sm">Недостатньо даних</p>
+                        ) : (
+                            <div className="flex flex-wrap justify-center gap-4">
+                                {stats.popularRoles.map((r: any, idx: number) => (
+                                    <div key={idx} className="bg-[#222] border border-gray-700 px-4 py-2 rounded-lg text-center min-w-[120px]">
+                                        <p className="font-bold text-blue-400 mb-1">{r.role}</p>
+                                        <p className="text-xs text-gray-400">{r.count} матчів</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SEASONS TAB
+   ═══════════════════════════════════════════════════════════ */
+function SeasonsTab({ token }: { token: string }) {
+    const [seasons, setSeasons] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [newSeasonName, setNewSeasonName] = useState('');
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/admin/seasons`, headers(token));
+            setSeasons(res.data);
+        } catch { }
+        setLoading(false);
+    };
+
+    useEffect(() => { load(); }, []);
+
+    const startSeason = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await axios.post(`${API_URL}/admin/seasons/start`, { name: newSeasonName }, headers(token));
+            setNewSeasonName('');
+            load();
+        } catch (err: any) { alert(err.response?.data?.message || 'Помилка'); }
+    };
+
+    const endSeason = async () => {
+        if (!confirm('Ви дійсно хочете завершити поточний сезон? Це скине MMR всіх гравців до 1500 і видасть нагороди топ-100. Дія незворотна!')) return;
+        try {
+            const res = await axios.post(`${API_URL}/admin/seasons/end`, {}, headers(token));
+            alert(`Сезон успішно завершено! Видано нагород: ${res.data.rewardsGiven}`);
+            load();
+        } catch (err: any) { alert(err.response?.data?.message || 'Помилка'); }
+    };
+
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2 mb-6">
+                <Calendar size={24} /> Управління Сезонами
+            </h2>
+
+            <div className="bg-[#1a1a1a] border border-gray-800 p-4 rounded mb-8">
+                <h3 className="text-lg font-bold mb-4">Поточний Сезон</h3>
+                {seasons.length > 0 && seasons[0].isActive ? (
+                    <div>
+                        <p className="text-xl text-green-400 font-bold mb-2">Активний: {seasons[0].name}</p>
+                        <p className="text-sm text-gray-400 mb-6">Початок: {new Date(seasons[0].startDate).toLocaleString('uk-UA')}</p>
+                        <button onClick={endSeason} className="bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 font-bold px-4 py-2 rounded transition w-full sm:w-auto">
+                            Завершити Сезон та Роздати Нагороди (Reset MMR)
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                        <p className="text-gray-500 mb-4">Наразі немає активного сезону.</p>
+                        <form onSubmit={startSeason} className="flex gap-2 flex-col sm:flex-row">
+                            <input
+                                type="text"
+                                placeholder="Введіть назву нового сезону (напр. 'Сезон 1')"
+                                required
+                                value={newSeasonName}
+                                onChange={e => setNewSeasonName(e.target.value)}
+                                className="bg-[#111] border border-gray-700 p-2 rounded text-white flex-1 focus:border-mafia-red focus:outline-none"
+                            />
+                            <button type="submit" className="bg-green-700 hover:bg-green-600 border border-green-600 text-white font-bold px-4 py-2 rounded transition whitespace-nowrap">
+                                Почати Сезон
+                            </button>
+                        </form>
+                    </div>
+                )}
+            </div>
+
+            <h3 className="text-lg font-bold mb-4">Історія Сезонів</h3>
+            {loading ? <p className="text-gray-500">Завантаження...</p> : seasons.length === 0 ? <p className="text-gray-500">Немає сезонів.</p> : (
+                <div className="space-y-3">
+                    {seasons.map(s => (
+                        <div key={s.id} className="bg-[#111] border border-gray-800 p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center gap-2 relative overflow-hidden">
+                            {s.isActive && <div className="absolute top-0 left-0 w-1 h-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div>}
+                            <div className={s.isActive ? 'pl-2' : ''}>
+                                <h4 className={`font-bold text-lg ${s.isActive ? 'text-green-500' : 'text-gray-300'}`}>{s.name} {s.isActive && '(Активний)'}</h4>
+                                <p className="text-xs text-gray-500 block sm:hidden">
+                                    {new Date(s.startDate).toLocaleDateString()} — {s.endDate ? new Date(s.endDate).toLocaleDateString() : 'дотепер'}
+                                </p>
+                            </div>
+                            <div className="text-left sm:text-right">
+                                <p className="text-xs text-gray-400 hidden sm:block">
+                                    {new Date(s.startDate).toLocaleDateString()} — {s.endDate ? new Date(s.endDate).toLocaleDateString() : 'дотепер'}
+                                </p>
+                                <p className="text-sm font-bold text-yellow-500 mt-1">Видано нагород: {s._count?.rewards || 0}</p>
+                            </div>
                         </div>
                     ))}
                 </div>
