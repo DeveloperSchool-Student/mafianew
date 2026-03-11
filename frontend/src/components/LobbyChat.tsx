@@ -12,7 +12,7 @@ interface ChatMessage {
     staffRoleColor?: string | null;
 }
 
-export function LobbyChat() {
+export function LobbyChat({ roomId = 'global' }: { roomId?: string }) {
     const { socket, user } = useAppStore();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputQuery, setInputQuery] = useState('');
@@ -22,7 +22,10 @@ export function LobbyChat() {
     useEffect(() => {
         if (!socket) return;
 
-        const handleGlobalChat = (msg: ChatMessage) => {
+        // Reset messages if switching rooms
+        setMessages([]);
+
+        const handleChatMessage = (msg: ChatMessage) => {
             setMessages((prev) => [...prev, msg].slice(-100)); // Keep last 100 messages
         };
 
@@ -39,16 +42,23 @@ export function LobbyChat() {
             }]);
         };
 
-        socket.on('global_chat_message', handleGlobalChat);
-        socket.on('global_chat_history', handleGlobalChatHistory);
-        socket.on('chat_cleared', handleChatCleared);
+        const eventName = roomId === 'global' ? 'global_chat_message' : 'chat_message';
+
+        socket.on(eventName, handleChatMessage);
+
+        if (roomId === 'global') {
+            socket.on('global_chat_history', handleGlobalChatHistory);
+            socket.on('chat_cleared', handleChatCleared);
+        }
 
         return () => {
-            socket.off('global_chat_message', handleGlobalChat);
-            socket.off('global_chat_history', handleGlobalChatHistory);
-            socket.off('chat_cleared', handleChatCleared);
+            socket.off(eventName, handleChatMessage);
+            if (roomId === 'global') {
+                socket.off('global_chat_history', handleGlobalChatHistory);
+                socket.off('chat_cleared', handleChatCleared);
+            }
         };
-    }, [socket]);
+    }, [socket, roomId]);
 
     useEffect(() => {
         if (isOpen && messagesEndRef.current) {
@@ -61,7 +71,7 @@ export function LobbyChat() {
         if (!inputQuery.trim() || !socket) return;
 
         socket.emit('chat_message', {
-            roomId: 'global', // We use 'global' to identify lobby chat in gateway
+            roomId: roomId,
             message: inputQuery.trim()
         });
 
@@ -94,7 +104,7 @@ export function LobbyChat() {
                     <div className="bg-gradient-to-r from-red-900/40 to-[#111] p-3 border-b border-gray-800 rounded-t-xl flex justify-between items-center">
                         <h3 className="font-bold text-white flex items-center gap-2">
                             <MessageSquare size={16} className="text-mafia-red" />
-                            Глобальний Чат
+                            {roomId === 'global' ? 'Глобальний Чат' : 'Чат Кімнати'}
                         </h3>
                         <span className="text-xs text-gray-400">{messages.length} повідомлень</span>
                     </div>

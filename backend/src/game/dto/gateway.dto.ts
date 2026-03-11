@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsUUID,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -16,7 +15,7 @@ export class CreateRoomDto {
 }
 
 export class RoomIdDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 }
 
@@ -24,7 +23,7 @@ export class InviteToRoomDto {
   @IsString()
   targetUserId!: string;
 
-  @IsUUID()
+  @IsString()
   roomId!: string;
 }
 
@@ -38,7 +37,7 @@ export class ReplyInviteDto {
 }
 
 export class ReadyDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsBoolean()
@@ -46,7 +45,7 @@ export class ReadyDto {
 }
 
 export class UpdateRoomSettingsDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsOptional()
@@ -54,7 +53,7 @@ export class UpdateRoomSettingsDto {
 }
 
 export class NightActionDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsString()
@@ -65,7 +64,7 @@ export class NightActionDto {
 }
 
 export class VoteDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsString()
@@ -73,7 +72,7 @@ export class VoteDto {
 }
 
 export class SaveLastWillDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsString()
@@ -82,7 +81,7 @@ export class SaveLastWillDto {
 }
 
 export class PlaceBetDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsString()
@@ -93,7 +92,7 @@ export class PlaceBetDto {
 }
 
 export class WhisperDto {
-  @IsUUID()
+  @IsString()
   roomId!: string;
 
   @IsString()

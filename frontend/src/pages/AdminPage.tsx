@@ -936,6 +936,15 @@ function RoomsTab({ token }: { token: string }) {
         navigate('/game');
     };
 
+    const closeRoom = async (roomId: string) => {
+        if (!confirm(`Ви впевнені, що хочете закрити кімнату ${roomId}?`)) return;
+        try {
+            await axios.post(`${API_URL}/admin/rooms/${roomId}/close`, {}, { headers: { Authorization: `Bearer ${token}` } });
+            alert('Кімнату успішно закрито.');
+            load();
+        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+    };
+
     return (
         <div>
             <h2 className="text-xl sm:text-2xl font-bold mb-6 text-blue-400">👀 Активні Кімнати</h2>
@@ -955,15 +964,23 @@ function RoomsTab({ token }: { token: string }) {
                                     </>
                                 )}
                             </div>
-                            <button
-                                onClick={() => spectate(r.id, r.status)}
-                                disabled={r.status !== 'IN_PROGRESS'}
-                                className={`mt-4 font-bold py-2 px-4 rounded transition w-full flex items-center justify-center gap-2 ${r.status === 'IN_PROGRESS'
-                                    ? 'bg-blue-900/50 hover:bg-blue-700 text-blue-300'
-                                    : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
-                            >
-                                <Eye size={16} /> {r.status === 'IN_PROGRESS' ? 'Спостерігати' : 'Очікування старту...'}
-                            </button>
+                            <div className="flex gap-2 mt-4">
+                                <button
+                                    onClick={() => spectate(r.id, r.status)}
+                                    disabled={r.status !== 'IN_PROGRESS'}
+                                    className={`flex-1 font-bold py-2 px-2 rounded transition flex items-center justify-center gap-1 text-sm ${r.status === 'IN_PROGRESS'
+                                        ? 'bg-blue-900/50 hover:bg-blue-700 text-blue-300'
+                                        : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                                >
+                                    <Eye size={16} /> {r.status === 'IN_PROGRESS' ? 'Спостерігати' : 'Очікування...'}
+                                </button>
+                                <button
+                                    onClick={() => closeRoom(r.id)}
+                                    className="flex-1 font-bold py-2 px-2 rounded transition flex items-center justify-center gap-1 text-sm bg-red-900/50 hover:bg-red-700 text-red-300"
+                                >
+                                    <Trash2 size={16} /> Закрити
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

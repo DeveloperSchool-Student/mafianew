@@ -39,7 +39,7 @@ export class AdminService {
     private readonly redisService: RedisService,
     @Inject(forwardRef(() => GameGateway))
     private readonly gameGateway: GameGateway,
-  ) {}
+  ) { }
 
   /* ─── helpers ─── */
 
@@ -168,7 +168,7 @@ export class AdminService {
           message: `Вашу посаду змінено на: ${targetRole.title}`,
         });
       }
-    } catch {}
+    } catch { }
 
     return { success: true };
   }
@@ -435,7 +435,7 @@ export class AdminService {
                 message: `Ваш акаунт заблоковано на 3 дні через ${recentWarns} попереджень за останні 7 днів.`,
               });
           }
-        } catch {}
+        } catch { }
       }
       // 3 WARNs in 7 days → auto MUTE 24h
       else if (recentWarns >= 3) {
@@ -476,7 +476,7 @@ export class AdminService {
                 message: `Вам заборонено писати в чат на 24 години через ${recentWarns} попереджень за останні 7 днів.`,
               });
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -504,7 +504,7 @@ export class AdminService {
                     : `Вас викинуто з кімнати. Причина: ${params.reason || '—'}.`,
           });
       }
-    } catch {}
+    } catch { }
 
     return { success: true };
   }
@@ -800,7 +800,7 @@ export class AdminService {
           });
         }
       }
-    } catch {}
+    } catch { }
 
     return { success: true };
   }
@@ -979,10 +979,52 @@ export class AdminService {
             phase,
             dayCount,
           });
-        } catch {}
+        } catch { }
       }
     }
     return rooms;
+  }
+
+  async closeRoom(
+    requestUser: { id: string; staffRoleKey?: string | null },
+    params: { roomId: string },
+  ) {
+    this.ensureMinPower(
+      requestUser,
+      PERMISSION.VIEW_ROOMS,
+      'Закриття кімнати',
+    );
+
+    const redis = this.redisService.getClient();
+    const roomData = await redis.get(`room:${params.roomId}`);
+    if (!roomData) throw new NotFoundException('Кімнату не знайдено');
+
+    // Notify all players
+    this.gameGateway.server.to(params.roomId).emit('system_chat', 'Кімнату було закрито адміністратором.');
+    this.gameGateway.server.to(params.roomId).emit('kicked_from_room', {
+      roomId: params.roomId,
+      reason: 'Кімнату закрив адміністратор.',
+    });
+
+    // Make all sockets leave the room
+    const sockets = await this.gameGateway.server.in(params.roomId).fetchSockets();
+    for (const s of sockets) {
+      s.leave(params.roomId);
+    }
+
+    // Delete from redis
+    await redis.del(`room:${params.roomId}`);
+    await redis.del(`game:${params.roomId}`);
+    await redis.del(`state:${params.roomId}`);
+
+    await this.logAction(
+      requestUser.id,
+      'CLOSE_ROOM',
+      null,
+      `Адміністратор закрив кімнату ${params.roomId}`,
+    );
+
+    return { success: true };
   }
 
   /* ═══════════════════  TITLES (LEADERS)  ═══════════════════ */

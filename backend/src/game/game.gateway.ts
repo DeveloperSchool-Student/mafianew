@@ -7,7 +7,7 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Inject, forwardRef, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Inject, forwardRef, UsePipes, ValidationPipe, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { JwtService } from '@nestjs/jwt';
@@ -40,7 +40,7 @@ import {
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 @SkipThrottle()
 @WebSocketGateway({ cors: { origin: process.env.CORS_ORIGIN || '*' } })
-export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
   @WebSocketServer()
   server!: Server;
 
@@ -77,7 +77,15 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => AdminService))
     private readonly adminService: AdminService,
-  ) {}
+  ) { }
+
+  onModuleInit() {
+    // Автоматичне очищення глобального чату кожні 12 годин
+    setInterval(() => {
+      this.globalChatHistory = [];
+      this.server.emit('chat_cleared');
+    }, 12 * 60 * 60 * 1000);
+  }
 
   async handleConnection(client: Socket) {
     try {
@@ -634,14 +642,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     if (!state) {
-      // Lobby Chat
-
-      // ── Admin commands in lobby chat ──
+      // ── Admin commands in lobby or pre-game chat ──
       if (data.message.startsWith('/')) {
         const handled = await this.handleAdminCommand(
           client,
           data.message,
-          null,
+          data.roomId === 'global' ? null : data.roomId,
         );
         if (handled) return;
       }
@@ -659,12 +665,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         staffRoleColor: staffRole?.color || null,
       };
 
-      this.globalChatHistory.push(msgObj);
-      if (this.globalChatHistory.length > 100) {
-        this.globalChatHistory.shift();
+      if (data.roomId === 'global') {
+        this.globalChatHistory.push(msgObj);
+        if (this.globalChatHistory.length > 100) {
+          this.globalChatHistory.shift();
+        }
+        this.server.emit('global_chat_message', msgObj);
+      } else {
+        // Pre-game Room Chat
+        this.server.to(data.roomId).emit('chat_message', msgObj);
       }
-
-      this.server.emit('global_chat_message', msgObj);
       return;
     }
 

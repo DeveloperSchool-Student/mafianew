@@ -796,8 +796,8 @@ export function Lobby() {
                 onClose={() => setIsRewardOpen(false)}
             />
 
-            {!gameState.roomId && !isSearchingOnline && (
-                <LobbyChat />
+            {!isSearchingOnline && (
+                <LobbyChat roomId={gameState.roomId || 'global'} />
             )}
         </div>
     );

@@ -14,7 +14,7 @@ import { AdminService } from './admin.service';
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'))
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
 
   /* ── Staff Management ── */
 
@@ -44,6 +44,11 @@ export class AdminController {
   @Get('rooms')
   getActiveRooms(@Request() req: any) {
     return this.adminService.getActiveRooms(req.user);
+  }
+
+  @Post('rooms/:id/close')
+  closeRoom(@Request() req: any, @Param('id') roomId: string) {
+    return this.adminService.closeRoom(req.user, { roomId });
   }
 
   /* ── Users ── */
