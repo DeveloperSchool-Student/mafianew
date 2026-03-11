@@ -17,9 +17,10 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
     };
 
     const me = gameState.players?.find(p => p.userId === user?.id);
+    const hasVoted = gameState.votes?.some((v: any) => v.voterId === user?.id);
 
     return (
-        <div className="bg-mafia-gray border border-gray-800 rounded p-4 h-[500px] md:h-[600px] overflow-y-auto">
+        <div className="bg-mafia-gray border border-gray-800 rounded p-3 sm:p-4 h-auto md:h-[600px] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">ГРАВЦІ ({gameState.players?.length || 0})</h3>
             <div className="space-y-3">
                 {gameState.players?.map((p: any, idx: number) => {
@@ -45,8 +46,8 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
                                     handleAction(p.userId);
                                 }
                             }}
-                            className={`p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center border transform min-h-[60px] gap-2 sm:gap-0 ${p.isAlive
-                                    ? `bg-[#1a1a1a] border-gray-700 hover:scale-[1.01] transition-all duration-300 hover:border-mafia-red/50 cursor-pointer shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
+                            className={`p-3 sm:p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center border transform min-h-[50px] sm:min-h-[60px] gap-2 sm:gap-0 ${p.isAlive
+                                    ? `bg-[#1a1a1a] border-gray-700 ${hasVoted && gameState.phase === 'DAY_VOTING' ? 'opacity-60 cursor-not-allowed' : 'hover:scale-[1.01] hover:border-mafia-red/50 cursor-pointer'} transition-all duration-300 shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
                                     : 'bg-black border-gray-900 scale-[0.98] transition-all duration-[2000ms] grayscale opacity-40 blur-[1px]'
                                 }`}
                         >
@@ -124,7 +125,12 @@ export function PlayerGrid({ handleAction, roleLabel }: PlayerGridProps) {
                                         </button>
                                     </>
                                 )}
-                                {!p.isAlive && !p.isSpectator && <span className="text-2xl">☠️</span>}
+                                {!p.isAlive && !p.isSpectator && (
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-2xl">☠️</span>
+                                        <span className="text-[10px] text-red-500 font-bold uppercase hidden sm:inline">Вбито</span>
+                                    </div>
+                                )}
                                 {p.isSpectator && <span className="text-2xl grayscale opacity-50">👀</span>}
                             </div>
                         </div>

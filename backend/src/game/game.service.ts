@@ -1795,6 +1795,11 @@ export class GameService implements OnModuleInit {
       if (!target || !target.isAlive) return false;
     }
 
+    // Prevent duplicate voting - once voted, cannot change
+    if (state.votes.has(userId)) {
+      return false;
+    }
+
     state.votes.set(userId, targetId);
     await this.saveGameState(state);
     return true;

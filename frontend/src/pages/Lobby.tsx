@@ -408,7 +408,7 @@ export function Lobby() {
                         </button>
 
                         {showNotifications && (
-                            <div className="absolute right-0 top-10 w-[85vw] max-w-sm bg-[#161616] border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden text-left">
+                            <div className="fixed inset-x-2 top-14 z-50 bg-[#161616] border border-gray-700 rounded-lg shadow-2xl overflow-hidden text-left max-w-sm mx-auto">
                                 <div className="p-3 border-b border-gray-800 bg-[#111] flex justify-between items-center">
                                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                                         <Bell size={14} /> Нотифікації
@@ -422,7 +422,7 @@ export function Lobby() {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="max-h-80 overflow-y-auto">
+                                <div className="max-h-[60vh] overflow-y-auto">
                                     {history.length > 0 ? history.map(notif => (
                                         <div
                                             key={notif.id}

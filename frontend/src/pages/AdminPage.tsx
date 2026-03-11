@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
 import axios from 'axios';
-import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords, Calendar } from 'lucide-react';
+import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords, Calendar, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TITLES } from '../constants/titles';
 
@@ -31,7 +31,7 @@ function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
 
-type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events' | 'stats' | 'seasons';
+type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events' | 'stats' | 'seasons' | 'commands';
 
 export function AdminPage() {
     const { user } = useAppStore();
@@ -60,6 +60,7 @@ export function AdminPage() {
         { key: 'duties', label: 'Обов\'язки', icon: FileText, minPower: 1 },
         { key: 'stats', label: 'Статистика', icon: Activity, minPower: 7 },
         { key: 'seasons', label: 'Сезони', icon: Calendar, minPower: 8 },
+        { key: 'commands', label: 'Команди', icon: Terminal, minPower: 1 },
         { key: 'events', label: 'Івенти', icon: Gift, minPower: 9 },
     ];
 
@@ -124,6 +125,7 @@ export function AdminPage() {
                     {tab === 'duties' && <DutiesTab />}
                     {tab === 'stats' && <StatsTab token={user.token} />}
                     {tab === 'seasons' && <SeasonsTab token={user.token} />}
+                    {tab === 'commands' && <CommandsTab myPower={myPower} />}
                     {tab === 'events' && <EventsTab token={user.token} />}
                 </main>
             </div>
@@ -1394,6 +1396,131 @@ function SeasonsTab({ token }: { token: string }) {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COMMANDS TAB — List of chat commands for admins
+   ═══════════════════════════════════════════════════════════ */
+
+function CommandsTab({ myPower }: { myPower: number }) {
+    const commands = [
+        {
+            cmd: '/warn',
+            syntax: "/warn <ім'я> <причина>",
+            description: 'Видати попередження гравцю. Причина буде збережена в логах.',
+            minPower: 1,
+            levelLabel: 'Lv.1+ (Стажер)',
+            example: '/warn PlayerName Порушення правил чату',
+            color: 'yellow',
+        },
+        {
+            cmd: '/mute',
+            syntax: "/mute <ім'я> <хвилини>",
+            description: 'Замутити гравця на вказану кількість хвилин. За замовчуванням — 30 хв.',
+            minPower: 2,
+            levelLabel: 'Lv.2+ (Хелпер)',
+            example: '/mute PlayerName 60',
+            color: 'orange',
+        },
+        {
+            cmd: '/kick',
+            syntax: "/kick <ім'я>",
+            description: 'Кікнути гравця з поточної кімнати / гри. Гравець буде відключений від кімнати.',
+            minPower: 3,
+            levelLabel: 'Lv.3+ (Модератор)',
+            example: '/kick PlayerName',
+            color: 'red',
+        },
+        {
+            cmd: '/ban',
+            syntax: "/ban <ім'я> <години>",
+            description: 'Тимчасово забанити гравця. За замовчуванням — 24 години.',
+            minPower: 4,
+            levelLabel: 'Lv.4+ (Ст. Модератор)',
+            example: '/ban PlayerName 48',
+            color: 'red',
+        },
+        {
+            cmd: '/clear',
+            syntax: '/clear',
+            description: 'Очистити глобальний чат. Всі повідомлення будуть видалені для всіх гравців.',
+            minPower: 4,
+            levelLabel: 'Lv.4+ (Ст. Модератор)',
+            example: '/clear',
+            color: 'blue',
+        },
+        {
+            cmd: '/addbot',
+            syntax: '/addbot <кількість>',
+            description: 'Додати ботів до поточної кімнати для тестування. Використовується тільки в кімнаті перед початком гри.',
+            minPower: 9,
+            levelLabel: 'Lv.9 (Власник)',
+            example: '/addbot 5',
+            color: 'purple',
+        },
+    ];
+
+    const availableCommands = commands.filter(c => myPower >= c.minPower);
+    const lockedCommands = commands.filter(c => myPower < c.minPower);
+
+    return (
+        <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-2 flex items-center gap-2">
+                <Terminal size={22} className="text-blue-400" /> Команди чату
+            </h2>
+            <p className="text-sm text-gray-400 mb-6">
+                Список команд, які можна використовувати в чаті гри або лоббі. Команди починаються з символу <code className="bg-gray-800 px-1.5 py-0.5 rounded text-white font-mono">/</code>
+            </p>
+
+            {/* Available commands */}
+            {availableCommands.length > 0 && (
+                <div className="mb-8">
+                    <h3 className="text-sm font-bold text-green-400 uppercase tracking-wider mb-3">✅ Доступні вам ({availableCommands.length})</h3>
+                    <div className="space-y-3">
+                        {availableCommands.map(c => (
+                            <div key={c.cmd} className={`bg-[#111] border border-${c.color}-900/50 rounded-xl p-4 hover:border-${c.color}-500/50 transition-colors`}>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                    <code className={`text-${c.color}-400 font-bold font-mono text-lg`}>{c.cmd}</code>
+                                    <span className={`text-[10px] uppercase font-bold bg-${c.color}-900/30 text-${c.color}-400 px-2 py-1 rounded border border-${c.color}-700/50 self-start sm:self-auto`}>
+                                        {c.levelLabel}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-300 mb-3">{c.description}</p>
+                                <div className="bg-[#0a0a0a] border border-gray-800 rounded p-3">
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Синтаксис</p>
+                                    <code className="text-sm text-white font-mono">{c.syntax}</code>
+                                </div>
+                                <div className="bg-[#0a0a0a] border border-gray-800 rounded p-3 mt-2">
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Приклад</p>
+                                    <code className="text-sm text-gray-300 font-mono">{c.example}</code>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Locked commands */}
+            {lockedCommands.length > 0 && (
+                <div>
+                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">🔒 Недоступні ({lockedCommands.length})</h3>
+                    <div className="space-y-2">
+                        {lockedCommands.map(c => (
+                            <div key={c.cmd} className="bg-[#111] border border-gray-800 rounded-xl p-3 opacity-50">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <code className="text-gray-400 font-bold font-mono">{c.cmd}</code>
+                                    <span className="text-[10px] uppercase font-bold bg-gray-800 text-gray-500 px-2 py-1 rounded border border-gray-700 self-start sm:self-auto">
+                                        {c.levelLabel}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">{c.description}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

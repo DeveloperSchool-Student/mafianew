@@ -105,8 +105,8 @@ export function Friends() {
     const sentRequests = friendsList.filter(f => f.status === 'pending' && f.isSender);
 
     return (
-        <div className="min-h-screen bg-mafia-dark text-mafia-light p-6">
-            <div className="max-w-3xl mx-auto mt-10">
+        <div className="min-h-screen bg-mafia-dark text-mafia-light p-3 sm:p-6">
+            <div className="max-w-3xl mx-auto mt-6 sm:mt-10">
                 <button
                     onClick={() => navigate('/lobby')}
                     className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6"
@@ -115,25 +115,25 @@ export function Friends() {
                 </button>
 
                 <div className="bg-[#161616] border border-gray-800 rounded-xl overflow-hidden shadow-2xl">
-                    <div className="bg-[#1a1a1a] p-6 border-b border-gray-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <Users size={32} className="text-blue-500" />
-                            <h1 className="text-3xl font-bold tracking-widest text-white uppercase">Друзі</h1>
+                    <div className="bg-[#1a1a1a] p-3 sm:p-6 border-b border-gray-800 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-center">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <Users size={24} className="text-blue-500 sm:w-8 sm:h-8" />
+                            <h1 className="text-xl sm:text-3xl font-bold tracking-widest text-white uppercase">Друзі</h1>
                         </div>
-                        <div className="flex gap-2 bg-black/50 p-1 rounded-lg">
+                        <div className="flex gap-1 sm:gap-2 bg-black/50 p-1 rounded-lg w-full sm:w-auto">
                             <button
                                 onClick={() => setTab('friends')}
-                                className={`px-4 py-2 rounded font-bold text-sm transition-colors ${tab === 'friends' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded font-bold text-xs sm:text-sm transition-colors ${tab === 'friends' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                             >
                                 Список ({acceptedFriends.length})
                             </button>
                             <button
                                 onClick={() => setTab('requests')}
-                                className={`px-4 py-2 rounded font-bold text-sm flex items-center gap-2 transition-colors ${tab === 'requests' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 rounded font-bold text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 transition-colors ${tab === 'requests' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                             >
                                 Запити
                                 {pendingRequests.length > 0 && (
-                                    <span className="bg-mafia-red text-white text-[10px] px-2 py-0.5 rounded-full">
+                                    <span className="bg-mafia-red text-white text-[10px] px-1.5 py-0.5 rounded-full">
                                         {pendingRequests.length}
                                     </span>
                                 )}
@@ -141,19 +141,19 @@ export function Friends() {
                         </div>
                     </div>
 
-                    <div className="p-6">
+                    <div className="p-3 sm:p-6">
                         {/* Форма додавання */}
-                        <form onSubmit={handleSendRequest} className="mb-8 bg-[#111] p-4 rounded border border-gray-800">
-                            <label className="block text-sm text-gray-400 mb-2 font-bold uppercase tracking-wider flex items-center gap-2"><UserPlus size={16} /> Додати друга</label>
-                            <div className="flex gap-2">
+                        <form onSubmit={handleSendRequest} className="mb-6 sm:mb-8 bg-[#111] p-3 sm:p-4 rounded border border-gray-800">
+                            <label className="block text-xs sm:text-sm text-gray-400 mb-2 font-bold uppercase tracking-wider flex items-center gap-2"><UserPlus size={16} /> Додати друга</label>
+                            <div className="flex flex-col sm:flex-row gap-2">
                                 <input
                                     type="text"
                                     value={addUsername}
                                     onChange={e => setAddUsername(e.target.value)}
                                     placeholder="Введіть нікнейм..."
-                                    className="flex-1 bg-[#1a1a1a] border border-gray-700 p-3 rounded text-white text-sm focus:outline-none focus:border-blue-500 transition-colors uppercase"
+                                    className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2.5 sm:p-3 rounded text-white text-sm focus:outline-none focus:border-blue-500 transition-colors uppercase box-border"
                                 />
-                                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded font-bold text-sm transition-colors uppercase tracking-wider">
+                                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded font-bold text-sm transition-colors uppercase tracking-wider">
                                     Надіслати
                                 </button>
                             </div>
@@ -169,33 +169,33 @@ export function Friends() {
                                 ) : (
                                     <div className="space-y-2">
                                         {acceptedFriends.map(f => (
-                                            <div key={f.id} className="flex items-center justify-between bg-[#1a1a1a] p-4 rounded border border-gray-800/50 hover:border-gray-600 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-800 border-2 border-gray-700 flex items-center justify-center font-bold text-xl">
+                                            <div key={f.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#1a1a1a] p-3 sm:p-4 rounded border border-gray-800/50 hover:border-gray-600 transition-colors gap-2 sm:gap-0">
+                                                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-800 border-2 border-gray-700 flex items-center justify-center font-bold text-base sm:text-xl flex-shrink-0">
                                                         {f.friend.profile?.avatarUrl ? (
                                                             <img src={f.friend.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
                                                         ) : (
                                                             f.friend.username.charAt(0)
                                                         )}
                                                     </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-white uppercase tracking-wider">{f.friend.username}</h3>
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-bold text-sm sm:text-lg text-white uppercase tracking-wider truncate">{f.friend.username}</h3>
                                                         <p className="text-xs text-gray-500">Рівень {f.friend.profile?.level || 1}</p>
                                                     </div>
                                                 </div>
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-2 self-end sm:self-auto flex-shrink-0">
                                                     {gameState.roomId && (
                                                         <button onClick={() => {
                                                             socket?.emit('invite_to_room', { targetUserId: f.friend.id, roomId: gameState.roomId });
-                                                        }} className="bg-green-900/40 hover:bg-green-700 text-green-300 p-2 rounded transition-colors border border-green-600/50" title="Запросити в кімнату">
-                                                            <UserPlus size={18} />
+                                                        }} className="bg-green-900/40 hover:bg-green-700 text-green-300 p-1.5 sm:p-2 rounded transition-colors border border-green-600/50" title="Запросити в кімнату">
+                                                            <UserPlus size={16} />
                                                         </button>
                                                     )}
-                                                    <button onClick={() => navigate(`/messages/${f.friend.id}`)} className="bg-blue-900/40 hover:bg-blue-700 text-blue-300 p-2 rounded transition-colors border border-blue-600/50" title="Написати">
-                                                        <MessageSquare size={18} />
+                                                    <button onClick={() => navigate(`/messages/${f.friend.id}`)} className="bg-blue-900/40 hover:bg-blue-700 text-blue-300 p-1.5 sm:p-2 rounded transition-colors border border-blue-600/50" title="Написати">
+                                                        <MessageSquare size={16} />
                                                     </button>
-                                                    <button onClick={() => handleRemove(f.id)} className="bg-red-900/40 hover:bg-red-700 text-red-300 p-2 rounded transition-colors border border-red-600/50" title="Видалити">
-                                                        <Trash2 size={18} />
+                                                    <button onClick={() => handleRemove(f.id)} className="bg-red-900/40 hover:bg-red-700 text-red-300 p-1.5 sm:p-2 rounded transition-colors border border-red-600/50" title="Видалити">
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             </div>
@@ -212,13 +212,13 @@ export function Friends() {
                                     ) : (
                                         <div className="space-y-2">
                                             {pendingRequests.map(f => (
-                                                <div key={f.id} className="flex items-center justify-between bg-blue-900/10 p-3 rounded border border-blue-900/30">
-                                                    <span className="font-bold text-white uppercase">{f.friend.username}</span>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => handleAccept(f.id)} className="bg-green-600 hover:bg-green-500 text-white p-2 rounded text-xs px-4 font-bold flex items-center gap-1 transition-colors">
+                                                <div key={f.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-blue-900/10 p-3 rounded border border-blue-900/30 gap-2 sm:gap-0">
+                                                    <span className="font-bold text-white uppercase text-sm truncate">{f.friend.username}</span>
+                                                    <div className="flex gap-2 self-end sm:self-auto flex-shrink-0">
+                                                        <button onClick={() => handleAccept(f.id)} className="bg-green-600 hover:bg-green-500 text-white p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors">
                                                             <Check size={14} /> Прийняти
                                                         </button>
-                                                        <button onClick={() => handleReject(f.id)} className="bg-red-900/50 hover:bg-red-800 text-red-100 p-2 rounded text-xs px-4 font-bold flex items-center gap-1 transition-colors border border-red-800">
+                                                        <button onClick={() => handleReject(f.id)} className="bg-red-900/50 hover:bg-red-800 text-red-100 p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors border border-red-800">
                                                             <X size={14} /> Відхилити
                                                         </button>
                                                     </div>

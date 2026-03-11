@@ -7,6 +7,23 @@ import { CoinIcon } from '../components/CoinIcon';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+const STAFF_ROLES = [
+    { key: 'OWNER', power: 9 },
+    { key: 'CURATOR', power: 8 },
+    { key: 'SENIOR_ADMIN', power: 7 },
+    { key: 'ADMIN', power: 6 },
+    { key: 'JUNIOR_ADMIN', power: 5 },
+    { key: 'SENIOR_MOD', power: 4 },
+    { key: 'MOD', power: 3 },
+    { key: 'HELPER', power: 2 },
+    { key: 'TRAINEE', power: 1 },
+];
+
+function getStaffPower(staffRoleKey?: string | null): number {
+    if (!staffRoleKey) return 0;
+    return STAFF_ROLES.find(r => r.key === staffRoleKey)?.power ?? 0;
+}
+
 function headers(token: string) {
     return { headers: { Authorization: `Bearer ${token}` } };
 }
@@ -173,7 +190,7 @@ export function Tournaments() {
                     <h1 className="text-base sm:text-xl font-bold">Турніри</h1>
                 </div>
                 <div className="flex items-center gap-2">
-                    {user.staffRoleKey && (
+                    {getStaffPower(user.staffRoleKey) >= 8 && (
                         <button onClick={() => setShowCreate(true)}
                             className="text-xs bg-yellow-600 hover:bg-yellow-500 text-black px-3 py-1.5 rounded font-bold transition flex items-center gap-1">
                             <Plus size={14} /> Створити

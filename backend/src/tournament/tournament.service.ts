@@ -24,9 +24,9 @@ export class TournamentService {
     },
   ) {
     const power = getStaffPower(requestUser.staffRoleKey);
-    if (power < PERMISSION.ADJUST_GOLD) {
+    if (power < PERMISSION.MANAGE_STAFF) {
       throw new ForbiddenException(
-        'Недостатньо прав для створення турніру. Потрібен мін. рівень 6.',
+        'Недостатньо прав для створення турніру. Потрібен мін. рівень 8.',
       );
     }
 

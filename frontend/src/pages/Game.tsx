@@ -20,7 +20,6 @@ export function Game() {
     const [showSoundSettings, setShowSoundSettings] = useState(false);
     const [showPhaseOverlay, setShowPhaseOverlay] = useState(false);
     const [overlayPhase, setOverlayPhase] = useState<string | null>(null);
-    const [mobileTab, setMobileTab] = useState<'players' | 'chat' | 'bets'>('players');
 
 
 
@@ -207,6 +206,14 @@ export function Game() {
         if (!me?.isAlive) return;
 
         if (gameState.phase === 'DAY_VOTING') {
+            // Check if already voted
+            const alreadyVoted = gameState.votes?.some((v: any) => v.voterId === user?.id);
+            if (alreadyVoted) {
+                // Notify user they already voted
+                const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Ви вже проголосували! Змінити голос неможливо.', type: 'system' as const };
+                useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
+                return;
+            }
             socket.emit('vote', { roomId: gameState.roomId, targetId });
         } else if (gameState.phase === 'NIGHT') {
             let actionType = '';
@@ -340,32 +347,32 @@ export function Game() {
             </AnimatePresence>
 
             {/* Header Info */}
-            <div className="w-full max-w-4xl flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
-                <div className="flex items-center gap-4">
+            <div className="w-full max-w-4xl flex justify-between items-center mb-4 sm:mb-8 border-b border-gray-800 pb-3 sm:pb-4">
+                <div className="flex items-center gap-2 sm:gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold font-mono tracking-widest text-mafia-red">ROOM: {gameState.roomId}</h2>
-                        <p className="text-gray-400">PHASE: <span className="font-bold text-white bg-[#1a1a1a] px-2 py-1 rounded">{phaseLabel(gameState.phase)}</span></p>
+                        <h2 className="text-base sm:text-2xl font-bold font-mono tracking-widest text-mafia-red">ROOM: {gameState.roomId}</h2>
+                        <p className="text-gray-400 text-xs sm:text-base">PHASE: <span className="font-bold text-white bg-[#1a1a1a] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-xs sm:text-sm">{phaseLabel(gameState.phase)}</span></p>
                     </div>
                     <button
                         onClick={() => setShowSoundSettings(true)}
-                        className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 transition"
+                        className="bg-gray-800 p-1.5 sm:p-2 rounded-full hover:bg-gray-700 transition"
                         title={t('game.sound_settings')}
                     >
-                        {soundSettings.master > 0 ? <Volume2 size={20} className="text-white" /> : <VolumeX size={20} className="text-gray-500" />}
+                        {soundSettings.master > 0 ? <Volume2 size={16} className="text-white sm:w-5 sm:h-5" /> : <VolumeX size={16} className="text-gray-500 sm:w-5 sm:h-5" />}
                     </button>
                 </div>
                 <div className="text-right">
-                    <p className="text-sm text-gray-400">{t('game.time_left', { time: gameState.timerMs ? Math.ceil(gameState.timerMs / 1000) : '--' }).replace(/: \d+с/, '')}</p>
-                    <div className={`text-3xl font-mono ${isGameOver ? 'text-green-400' : 'text-mafia-red animate-pulse'}`}>
+                    <p className="text-xs sm:text-sm text-gray-400">{t('game.time_left', { time: gameState.timerMs ? Math.ceil(gameState.timerMs / 1000) : '--' }).replace(/: \d+с/, '')}</p>
+                    <div className={`text-xl sm:text-3xl font-mono ${isGameOver ? 'text-green-400' : 'text-mafia-red animate-pulse'}`}>
                         {isGameOver ? '🏆' : gameState.timerMs ? Math.ceil(gameState.timerMs / 1000) : '--'}
                     </div>
                 </div>
             </div>
 
             {/* Role Reveal Block */}
-            <div className="w-full max-w-4xl bg-[#161616] border border-gray-800 rounded p-6 mb-8 shadow-2xl text-center">
+            <div className="w-full max-w-4xl bg-[#161616] border border-gray-800 rounded p-3 sm:p-6 mb-4 sm:mb-8 shadow-2xl text-center">
                 {gameState.myRole || me?.isSpectator ? (
-                    <div className="text-2xl font-bold uppercase tracking-[0.2em] text-white">
+                    <div className="text-lg sm:text-2xl font-bold uppercase tracking-[0.2em] text-white">
                         {me?.isSpectator ? (
                             <span className="text-gray-500">SPECTATOR 👀</span>
                         ) : gameState.myRole === 'MAFIA' || gameState.myRole === 'DON' ? (
@@ -379,6 +386,10 @@ export function Game() {
                         )}
                     </div>
                 ) : null}
+                {/* Voted indicator */}
+                {gameState.phase === 'DAY_VOTING' && me?.isAlive && gameState.votes?.some((v: any) => v.voterId === user?.id) && (
+                    <div className="mt-2 text-xs sm:text-sm text-green-400 font-bold animate-pulse">   Ви вже проголосували</div>
+                )}
             </div>
 
             {/* Mayor Veto Prompt */}
@@ -400,41 +411,22 @@ export function Game() {
                 </motion.div>
             )}
 
-            {/* Mobile Tabs Navigation */}
-            <div className="w-full max-w-4xl md:hidden flex gap-2 mb-4 bg-[#111] border border-gray-800 p-1 rounded-lg">
-                <button
-                    onClick={() => setMobileTab('players')}
-                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'players' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    ГРАВЦІ
-                </button>
-                <button
-                    onClick={() => setMobileTab('chat')}
-                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'chat' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    ЧАТ
-                </button>
-                <button
-                    onClick={() => setMobileTab('bets')}
-                    className={`flex-1 py-2 text-xs font-bold rounded transition ${mobileTab === 'bets' ? 'bg-mafia-red text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                    ДІЇ (СТАВКИ)
-                </button>
-            </div>
+            {/* Main Game Layout - Single Screen on Mobile */}
+            <div className="w-full max-w-4xl grid md:grid-cols-3 gap-3 sm:gap-6">
 
-            {/* Main Game Grid */}
-            <div className="w-full max-w-4xl grid md:grid-cols-3 gap-6">
-
-                <div className={`md:col-span-2 space-y-6 flex flex-col ${mobileTab !== 'players' && mobileTab !== 'bets' ? 'hidden md:flex' : ''}`}>
-                    <div className={`${mobileTab === 'bets' ? 'block md:hidden' : 'hidden md:block'}`}>
+                <div className="md:col-span-2 space-y-3 sm:space-y-6 flex flex-col">
+                    {/* Betting Panel - always visible but compact on mobile */}
+                    <div className="md:block">
                         <BettingPanel />
                     </div>
-                    <div className={`${mobileTab === 'players' ? 'block' : 'hidden md:block'}`}>
+                    {/* Player Grid - always visible, capped height on mobile */}
+                    <div className="max-h-[300px] md:max-h-none overflow-y-auto">
                         <PlayerGrid handleAction={handleAction} roleLabel={roleLabel} />
                     </div>
                 </div>
 
-                <div className={`${mobileTab === 'chat' ? 'block' : 'hidden md:block'}`}>
+                {/* Chat Panel - always visible, capped height on mobile */}
+                <div className="max-h-[300px] md:max-h-none overflow-y-auto">
                     <ChatPanel
                         donMode={donMode}
                         setDonMode={setDonMode}
