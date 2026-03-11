@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
+import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Check, Loader2 } from 'lucide-react';
 import type { UserProfile } from '../types/api';
@@ -52,7 +53,7 @@ export function Store() {
     const navigate = useNavigate();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+    const { addToast } = useToastStore();
 
     useEffect(() => {
         if (!user) {
@@ -62,18 +63,13 @@ export function Store() {
         fetchProfile();
     }, [user, navigate]);
 
-    const showFeedback = (type: 'success' | 'error', message: string) => {
-        setFeedback({ type, message });
-        setTimeout(() => setFeedback(null), 3000);
-    };
-
     const fetchProfile = async () => {
         if (!user) return;
         try {
             const data = await profileApi.fetchMyProfile(user.token);
             setProfile(data);
         } catch {
-            showFeedback('error', 'Не вдалося завантажити профіль');
+            addToast('error', 'Не вдалося завантажити профіль');
         }
     };
 
@@ -83,10 +79,10 @@ export function Store() {
         try {
             await storeApi.buyFrame(user.token, item.id);
             fetchProfile(); // Refresh profile to get updated balance and unlocks
-            showFeedback('success', `Успішно придбано: ${item.name}`);
+            addToast('success', `Успішно придбано: ${item.name}`);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка покупки');
+            addToast('error', e.response?.data?.message || 'Помилка покупки');
         } finally {
             setLoadingAction(null);
         }
@@ -98,10 +94,10 @@ export function Store() {
         try {
             await storeApi.equipFrame(user.token, item.id);
             fetchProfile();
-            showFeedback('success', `Екіпіровано: ${item.name}`);
+            addToast('success', `Екіпіровано: ${item.name}`);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка екіпірування');
+            addToast('error', e.response?.data?.message || 'Помилка екіпірування');
         } finally {
             setLoadingAction(null);
         }
@@ -115,18 +111,6 @@ export function Store() {
 
     return (
         <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center">
-            {feedback && (
-                <div className="fixed top-20 z-50 animate-in fade-in slide-in-from-top-4">
-                    <div className={`px-4 py-3 rounded shadow-lg border text-sm font-bold flex items-center gap-2 ${
-                        feedback.type === 'success' 
-                            ? 'bg-green-900/40 text-green-300 border-green-800' 
-                            : 'bg-red-900/40 text-red-300 border-red-800'
-                    }`}>
-                        {feedback.type === 'success' ? <Check size={16} /> : '❌'}
-                        {feedback.message}
-                    </div>
-                </div>
-            )}
             
             <div className="w-full max-w-4xl mt-8">
                 <div className="flex justify-between items-center mb-8">

@@ -28,6 +28,7 @@ import { Tournaments } from './pages/Tournaments.tsx'
 // @ts-ignore
 import Twemoji from 'react-twemoji'
 import { NotificationToaster } from './components/NotificationToaster.tsx'
+import { ToastContainer } from './components/ToastContainer.tsx'
 
 import { registerSW } from 'virtual:pwa-register'
 
@@ -74,6 +75,7 @@ createRoot(document.getElementById('root')!).render(
         </Routes>
       </Twemoji>
       <NotificationToaster />
+      <ToastContainer />
     </BrowserRouter>
   </StrictMode>,
 )

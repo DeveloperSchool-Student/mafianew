@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
+import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Shield, LogOut, Swords, Check, X, Loader2 } from 'lucide-react';
 import type { UserProfile } from '../types/api';
@@ -9,6 +10,7 @@ import * as clansApi from '../services/clansApi';
 
 export function Clans() {
     const { user } = useAppStore();
+    const { addToast } = useToastStore();
     const navigate = useNavigate();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [clans, setClans] = useState<clansApi.Clan[]>([]);
@@ -20,9 +22,7 @@ export function Clans() {
     const [warBet, setWarBet] = useState<number | ''>('');
     const [newClanName, setNewClanName] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
-    
-    // Inline feedback
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
 
     useEffect(() => {
         if (!user) {
@@ -31,11 +31,6 @@ export function Clans() {
         }
         fetchData();
     }, [user, navigate]);
-
-    const showFeedback = (type: 'success' | 'error', message: string) => {
-        setFeedback({ type, message });
-        setTimeout(() => setFeedback(null), 4000);
-    };
 
     const fetchData = () => {
         if (!user) return;
@@ -60,11 +55,11 @@ export function Clans() {
             await clansApi.createClan(user.token, newClanName);
             setShowCreateModal(false);
             setNewClanName('');
-            showFeedback('success', 'Успішно створено клан!');
+            addToast('success', 'Успішно створено клан!');
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -75,11 +70,11 @@ export function Clans() {
         setActionLoading(true);
         try {
             await clansApi.joinClan(user.token, clanName);
-            showFeedback('success', `Ви успішно вступили до клану ${clanName}!`);
+            addToast('success', `Ви успішно вступили до клану ${clanName}!`);
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -90,11 +85,11 @@ export function Clans() {
         setActionLoading(true);
         try {
             await clansApi.leaveClan(user.token);
-            showFeedback('success', 'Ви покинули клан.');
+            addToast('success', 'Ви покинули клан.');
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -105,11 +100,11 @@ export function Clans() {
         setActionLoading(true);
         try {
             await clansApi.kickClanMember(user.token, targetId);
-            showFeedback('success', 'Гравця вигнано з клану.');
+            addToast('success', 'Гравця вигнано з клану.');
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -120,11 +115,11 @@ export function Clans() {
         setActionLoading(true);
         try {
             await clansApi.promoteClanMember(user.token, targetId, role);
-            showFeedback('success', `Роль гравця змінено на ${role}.`);
+            addToast('success', `Роль гравця змінено на ${role}.`);
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -137,11 +132,11 @@ export function Clans() {
             await clansApi.declareWar(user.token, selectedTargetClan.id, Number(warBet));
             setShowWarModal(false);
             setWarBet('');
-            showFeedback('success', 'Війну оголошено!');
+            addToast('success', 'Війну оголошено!');
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -153,14 +148,14 @@ export function Clans() {
         try {
             await clansApi.answerWar(user.token, warId, action);
             if (action === 'accept') {
-                showFeedback('success', 'Ви прийняли виклик на війну!');
+                addToast('success', 'Ви прийняли виклик на війну!');
             } else {
-                showFeedback('success', 'Ви відхилили війну.');
+                addToast('success', 'Ви відхилили війну.');
             }
             fetchData();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -176,17 +171,6 @@ export function Clans() {
 
     return (
         <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center relative">
-            {feedback && (
-                <div className="fixed top-20 z-50 animate-in fade-in slide-in-from-top-4 shadow-2xl">
-                    <div className={`px-4 py-3 rounded border text-sm font-bold flex items-center gap-2 ${
-                        feedback.type === 'success' ? 'bg-green-900/50 text-green-300 border-green-800' : 'bg-red-900/50 text-red-300 border-red-800'
-                    }`}>
-                        {feedback.type === 'success' ? <Check size={16} /> : '❌'}
-                        {feedback.message}
-                    </div>
-                </div>
-            )}
-
             <div className="w-full max-w-5xl mt-8">
                 <div className="flex justify-between items-center mb-8">
                     <button onClick={() => navigate('/lobby')} className="text-mafia-red hover:underline">&larr; В Лоббі</button>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
+import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Users, ArrowLeft, Plus, Play, X, Award, Loader2 } from 'lucide-react';
 import { CoinIcon } from '../components/CoinIcon';
@@ -9,15 +10,13 @@ import * as tournamentsApi from '../services/tournamentsApi';
 
 export function Tournaments() {
     const { user } = useAppStore();
+    const { addToast } = useToastStore();
     const navigate = useNavigate();
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(false);
     const [filter, setFilter] = useState<string>('');
     const [showCreate, setShowCreate] = useState(false);
     const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
-
-    // Inline feedback
-    const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
     // Create form
@@ -34,12 +33,8 @@ export function Tournaments() {
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         loadTournaments();
+        loadTournaments();
     }, [user, navigate, filter]);
-
-    const showFeedback = (type: 'success' | 'error', message: string) => {
-        setFeedback({ type, message });
-        setTimeout(() => setFeedback(null), 4000);
-    };
 
     const loadTournaments = async () => {
         if (!user) return;
@@ -48,7 +43,7 @@ export function Tournaments() {
             const data = await tournamentsApi.fetchTournaments(user.token, filter || undefined);
             setTournaments(data);
         } catch {
-            showFeedback('error', 'Не вдалося завантажити турніри');
+            addToast('error', 'Не вдалося завантажити турніри');
         }
         setLoading(false);
     };
@@ -60,7 +55,7 @@ export function Tournaments() {
             setSelectedTournament(data);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка завантаження турніру');
+            addToast('error', e.response?.data?.message || 'Помилка завантаження турніру');
         }
     };
 
@@ -73,11 +68,11 @@ export function Tournaments() {
             });
             setShowCreate(false);
             setName(''); setPrizePool(0); setEntryFee(0); setRules('');
-            showFeedback('success', 'Турнір успішно створено!');
+            addToast('success', 'Турнір успішно створено!');
             loadTournaments();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка створення турніру');
+            addToast('error', e.response?.data?.message || 'Помилка створення турніру');
         } finally {
             setActionLoading(false);
         }
@@ -88,12 +83,12 @@ export function Tournaments() {
         setActionLoading(true);
         try {
             await tournamentsApi.joinTournament(user.token, id);
-            showFeedback('success', '✅ Ви зареєстровані на турнір!');
+            addToast('success', '✅ Ви зареєстровані на турнір!');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка реєстрації');
+            addToast('error', e.response?.data?.message || 'Помилка реєстрації');
         } finally {
             setActionLoading(false);
         }
@@ -104,12 +99,12 @@ export function Tournaments() {
         setActionLoading(true);
         try {
             await tournamentsApi.leaveTournament(user.token, id);
-            showFeedback('success', 'Ви покинули турнір.');
+            addToast('success', 'Ви покинули турнір.');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -120,12 +115,12 @@ export function Tournaments() {
         setActionLoading(true);
         try {
             await tournamentsApi.startTournament(user.token, id);
-            showFeedback('success', '🎮 Турнір розпочато!');
+            addToast('success', '🎮 Турнір розпочато!');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -136,14 +131,14 @@ export function Tournaments() {
         setActionLoading(true);
         try {
             await tournamentsApi.endTournament(user.token, id, endWinnerId || undefined);
-            showFeedback('success', '🏆 Турнір завершено!');
+            addToast('success', '🏆 Турнір завершено!');
             setShowEndModal(false);
             setEndWinnerId('');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -154,12 +149,12 @@ export function Tournaments() {
         setActionLoading(true);
         try {
             await tournamentsApi.cancelTournament(user.token, id);
-            showFeedback('success', 'Турнір скасовано.');
+            addToast('success', 'Турнір скасовано.');
             loadTournaments();
             setSelectedTournament(null);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            showFeedback('error', e.response?.data?.message || 'Помилка');
+            addToast('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -203,17 +198,6 @@ export function Tournaments() {
             </div>
 
             <div className="max-w-4xl mx-auto p-3 sm:p-6">
-                {/* Inline Feedback */}
-                {feedback && (
-                    <div className={`mb-4 p-3 rounded-lg border text-sm font-medium transition-all ${
-                        feedback.type === 'success' 
-                            ? 'bg-green-900/30 border-green-800/50 text-green-300' 
-                            : 'bg-red-900/30 border-red-800/50 text-red-300'
-                    }`}>
-                        {feedback.message}
-                    </div>
-                )}
-
                 {/* Filters */}
                 <div className="flex gap-2 mb-6 flex-wrap">
                     {['', 'REGISTRATION', 'ACTIVE', 'FINISHED'].map(s => (

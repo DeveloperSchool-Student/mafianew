@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
+import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
 import { Users, UserPlus, Check, X, Trash2, MessageSquare, Loader2 } from 'lucide-react';
 import * as friendsApi from '../services/friendsApi';
@@ -7,18 +8,16 @@ import type { Friend } from '../types/api';
 
 export function Friends() {
     const { user, socket, gameState } = useAppStore();
+    const { addToast } = useToastStore();
     const navigate = useNavigate();
     const [friendsList, setFriendsList] = useState<Friend[]>([]);
     const [loading, setLoading] = useState(true);
     const [tab, setTab] = useState<'friends' | 'requests'>('friends');
     const [addUsername, setAddUsername] = useState('');
-    const [addError, setAddError] = useState('');
-    const [addSuccess, setAddSuccess] = useState('');
     const [addLoading, setAddLoading] = useState(false);
-
     // Action feedback
     const [actionLoading, setActionLoading] = useState<string | null>(null); // friend ID being actioned
-    const [actionError, setActionError] = useState('');
+
 
     useEffect(() => {
         if (!user) {
@@ -43,18 +42,15 @@ export function Friends() {
     const handleSendRequest = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !addUsername.trim() || addLoading) return;
-        setAddError('');
-        setAddSuccess('');
         setAddLoading(true);
         try {
             await friendsApi.sendFriendRequest(user.token, addUsername.trim());
             setAddUsername('');
-            setAddSuccess('Запит на дружбу надіслано!');
+            addToast('success', 'Запит на дружбу надіслано!');
             loadFriends();
-            setTimeout(() => setAddSuccess(''), 3000);
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            setAddError(e.response?.data?.message || 'Помилка надсилання запиту');
+            addToast('error', e.response?.data?.message || 'Помилка надсилання запиту');
         } finally {
             setAddLoading(false);
         }
@@ -63,13 +59,13 @@ export function Friends() {
     const handleAccept = async (id: string) => {
         if (!user || actionLoading) return;
         setActionLoading(id);
-        setActionError('');
         try {
             await friendsApi.acceptFriend(user.token, id);
+            addToast('success', 'Запит на дружбу прийнято!');
             loadFriends();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            setActionError(e.response?.data?.message || 'Помилка прийняття запиту');
+            addToast('error', e.response?.data?.message || 'Помилка прийняття запиту');
         } finally {
             setActionLoading(null);
         }
@@ -78,13 +74,13 @@ export function Friends() {
     const handleReject = async (id: string) => {
         if (!user || actionLoading) return;
         setActionLoading(id);
-        setActionError('');
         try {
             await friendsApi.rejectFriend(user.token, id);
+            addToast('info', 'Запит відхилено.');
             loadFriends();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            setActionError(e.response?.data?.message || 'Помилка відхилення запиту');
+            addToast('error', e.response?.data?.message || 'Помилка відхилення запиту');
         } finally {
             setActionLoading(null);
         }
@@ -94,13 +90,13 @@ export function Friends() {
         if (!user || actionLoading) return;
         if (!window.confirm('Ви впевнені, що хочете видалити цього друга?')) return;
         setActionLoading(id);
-        setActionError('');
         try {
             await friendsApi.removeFriend(user.token, id);
+            addToast('success', 'Друга видалено.');
             loadFriends();
         } catch (err: unknown) {
             const e = err as { response?: { data?: { message?: string } } };
-            setActionError(e.response?.data?.message || 'Помилка видалення друга');
+            addToast('error', e.response?.data?.message || 'Помилка видалення друга');
         } finally {
             setActionLoading(null);
         }
@@ -168,16 +164,7 @@ export function Friends() {
                                     {addLoading ? <><Loader2 size={14} className="animate-spin" /> Надсилання...</> : 'Надіслати'}
                                 </button>
                             </div>
-                            {addError && <p className="text-red-500 text-xs mt-2 font-bold">❌ {addError}</p>}
-                            {addSuccess && <p className="text-green-500 text-xs mt-2 font-bold">✅ {addSuccess}</p>}
                         </form>
-
-                        {/* Action-level error */}
-                        {actionError && (
-                            <div className="mb-4 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2 text-red-300 text-xs">
-                                ❌ {actionError}
-                            </div>
-                        )}
 
                         {loading ? (
                             <div className="p-10 text-center text-gray-500 animate-pulse">Завантаження...</div>
