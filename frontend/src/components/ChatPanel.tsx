@@ -9,13 +9,16 @@ interface ChatPanelProps {
     showLastWill: boolean;
     setShowLastWill: (show: boolean) => void;
     submitLastWill: () => void;
+    /** When true, uses h-full to fill parent (for drawer mode) */
+    inDrawer?: boolean;
 }
 
 export function ChatPanel({
     donMode, setDonMode,
     lastWill, setLastWill,
     showLastWill, setShowLastWill,
-    submitLastWill
+    submitLastWill,
+    inDrawer = false,
 }: ChatPanelProps) {
     const { user, gameState, socket } = useAppStore();
     const me = gameState.players?.find(p => p.userId === user?.id);
@@ -52,7 +55,7 @@ export function ChatPanel({
     };
 
     return (
-        <div className="bg-[#111] border border-gray-800 rounded flex flex-col h-[500px] md:h-[600px] pb-safe">
+        <div className={`bg-[#111] border border-gray-800 rounded flex flex-col ${inDrawer ? 'h-full border-0 rounded-none' : 'h-[500px] md:h-[600px]'} pb-safe`}>
             <div className="p-4 border-b border-gray-800 bg-black/50 flex justify-between items-center shrink-0">
                 <div className="flex gap-4 overflow-x-auto whitespace-nowrap scrollbar-hide">
                     {me?.isAlive && !me?.isSpectator && (
