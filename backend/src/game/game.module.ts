@@ -7,6 +7,14 @@ import { UsersModule } from '../users/users.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RedisModule } from '../redis/redis.module';
 import { AdminModule } from '../admin/admin.module';
+import { PhaseTransitionService } from './logic/phase-transition.service';
+import { RoleDistributionService } from './logic/role-distribution.service';
+import { VotingResolutionService } from './logic/voting-resolution.service';
+import { NightActionResolutionService } from './logic/night-action-resolution.service';
+import { WinConditionService } from './logic/win-condition.service';
+import { MatchRecordingService } from './logic/match-recording.service';
+import { SpectatorBetService } from './logic/spectator-bet.service';
+import { GameHelpersService } from './logic/game-helpers.service';
 
 @Module({
   imports: [
@@ -20,7 +28,18 @@ import { AdminModule } from '../admin/admin.module';
       signOptions: { expiresIn: '7d' },
     }),
   ],
-  providers: [GameGateway, GameService],
+  providers: [
+    GameGateway,
+    GameService,
+    PhaseTransitionService,
+    RoleDistributionService,
+    VotingResolutionService,
+    NightActionResolutionService,
+    WinConditionService,
+    MatchRecordingService,
+    SpectatorBetService,
+    GameHelpersService,
+  ],
   exports: [GameGateway],
 })
 export class GameModule {}
