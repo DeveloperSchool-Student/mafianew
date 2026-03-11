@@ -2,31 +2,12 @@ import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
-import { Trophy, Hash, Edit2, Volume2, VolumeX } from 'lucide-react';
+import { Trophy, Hash, Edit2, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { audioManager } from '../utils/audio';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface UserProfile {
-    id: string;
-    username: string;
-    email?: string | null;
-    isTwoFactorEnabled?: boolean;
-    createdAt: string;
-    staffRoleKey?: string | null;
-    staffRole?: { title: string; color: string; } | null;
-    profile?: {
-        matches: number; wins: number; losses: number; avatarUrl?: string; xp?: number; level?: number; activeFrame?: string; title?: string | null; mmr?: number;
-        bannedUntil?: string | null; mutedUntil?: string | null;
-        matchHistory?: {
-            id: string; role: string; won: boolean;
-            match: { id: string; winner: string; duration: number; createdAt: string; }
-        }[]
-    };
-    wallet?: { soft: number; hard: number };
-}
+import type { UserProfile, Quest } from '../types/api';
+import * as profileApi from '../services/profileApi';
+import * as authApi from '../services/authApi';
 
 export function Profile() {
     const { user, logout, theme, setTheme } = useAppStore();
@@ -37,13 +18,21 @@ export function Profile() {
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isEditingAvatar, setIsEditingAvatar] = useState(false);
     const [newAvatarUrl, setNewAvatarUrl] = useState('');
-    const [quests, setQuests] = useState<any[]>([]);
+    const [quests, setQuests] = useState<Quest[]>([]);
+
+    // Loading + error states
+    const [loadError, setLoadError] = useState('');
+    const [avatarSaving, setAvatarSaving] = useState(false);
+    const [avatarError, setAvatarError] = useState('');
+    const [questClaimLoading, setQuestClaimLoading] = useState<string | null>(null);
+    const [questClaimError, setQuestClaimError] = useState('');
 
     // Email binding state
     const [bindEmailMode, setBindEmailMode] = useState(false);
     const [newEmail, setNewEmail] = useState('');
     const [bindEmailError, setBindEmailError] = useState('');
     const [bindEmailSuccess, setBindEmailSuccess] = useState('');
+    const [bindEmailLoading, setBindEmailLoading] = useState(false);
 
     // 2FA state
     const [twoFactorMode, setTwoFactorMode] = useState(false);
@@ -51,6 +40,7 @@ export function Profile() {
     const [twoFactorToken, setTwoFactorToken] = useState('');
     const [twoFactorError, setTwoFactorError] = useState('');
     const [twoFactorSuccess, setTwoFactorSuccess] = useState('');
+    const [twoFactorLoading, setTwoFactorLoading] = useState(false);
 
     // Audio State
     const [volume, setVolume] = useState(audioManager.getVolume());
@@ -61,6 +51,7 @@ export function Profile() {
     const [appealReason, setAppealReason] = useState('');
     const [appealError, setAppealError] = useState('');
     const [appealSuccess, setAppealSuccess] = useState('');
+    const [appealLoading, setAppealLoading] = useState(false);
 
     useEffect(() => {
         if (!user) {
@@ -68,141 +59,164 @@ export function Profile() {
             return;
         }
 
-        if (isOwnProfile) {
-            // Own profile — load full data
-            axios.get(`${API_URL}/users/me`, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            })
-                .then(res => setProfile(res.data))
-                .catch(err => console.error(err));
+        setLoadError('');
 
-            axios.get(`${API_URL}/users/quests`, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            })
-                .then(res => setQuests(res.data))
-                .catch(err => console.error(err));
+        if (isOwnProfile) {
+            profileApi.fetchMyProfile(user.token)
+                .then(data => setProfile(data))
+                .catch(() => setLoadError('Не вдалося завантажити профіль'));
+
+            profileApi.fetchQuests(user.token)
+                .then(data => setQuests(data))
+                .catch(() => {}); // quests are non-critical
         } else {
-            // Other player's profile — load public read-only data
-            axios.get(`${API_URL}/users/profile/${routeUserId}`, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            })
-                .then(res => setProfile(res.data))
-                .catch(err => {
-                    console.error(err);
+            profileApi.fetchUserProfile(user.token, routeUserId!)
+                .then(data => setProfile(data))
+                .catch(() => {
+                    setLoadError('Профіль не знайдено');
                     navigate('/lobby');
                 });
         }
     }, [user, navigate, routeUserId, isOwnProfile]);
 
     const claimQuest = async (questId: string) => {
+        if (!user || questClaimLoading) return;
+        setQuestClaimLoading(questId);
+        setQuestClaimError('');
         try {
-            const res = await axios.post(`${API_URL}/users/quests/claim`, { questId }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            if (res.data.success) {
+            const res = await profileApi.claimQuest(user.token, questId);
+            if (res.success) {
                 setQuests(prev => prev.map(q => q.id === questId ? { ...q, claimed: true } : q));
-                setProfile(p => p ? { ...p, wallet: { ...p.wallet!, soft: p.wallet!.soft + res.data.reward } } : null);
+                setProfile(p => p ? { ...p, wallet: { ...p.wallet!, soft: p.wallet!.soft + res.reward } } : null);
             }
-        } catch (err: any) {
-            alert(err.response?.data?.message || err.message);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } }; message?: string };
+            setQuestClaimError(e.response?.data?.message || e.message || 'Помилка отримання нагороди');
+            setTimeout(() => setQuestClaimError(''), 5000);
+        } finally {
+            setQuestClaimLoading(null);
         }
     };
 
     const handleAvatarSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || avatarSaving) return;
+        setAvatarSaving(true);
+        setAvatarError('');
         try {
-            await axios.post(`${API_URL}/users/avatar`, { avatarUrl: newAvatarUrl }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await profileApi.updateAvatar(user.token, newAvatarUrl);
             setProfile(prev => prev ? { ...prev, profile: { ...prev.profile!, avatarUrl: newAvatarUrl } } : null);
             setIsEditingAvatar(false);
             setNewAvatarUrl('');
-        } catch (err) {
-            console.error('Failed to update avatar', err);
+        } catch {
+            setAvatarError('Не вдалося оновити аватар');
+        } finally {
+            setAvatarSaving(false);
         }
     };
 
     const handleBindEmail = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || bindEmailLoading) return;
         setBindEmailError('');
         setBindEmailSuccess('');
+        setBindEmailLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/bind-email`, { email: newEmail }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setBindEmailSuccess(res.data.message);
+            const res = await authApi.bindEmail(user.token, newEmail);
+            setBindEmailSuccess(res.message);
             setProfile(prev => prev ? { ...prev, email: newEmail } : null);
             setBindEmailMode(false);
             setNewEmail('');
-        } catch (err: any) {
-            setBindEmailError(err.response?.data?.message || 'Помилка прив\'язки пошти');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setBindEmailError(e.response?.data?.message || 'Помилка прив\'язки пошти');
+        } finally {
+            setBindEmailLoading(false);
         }
     };
 
     const startTwoFactorSetup = async () => {
+        if (!user || twoFactorLoading) return;
+        setTwoFactorLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/2fa/generate`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setQrCodeDataUrl(res.data.qrCodeDataUrl);
+            const res = await authApi.generate2FA(user.token);
+            setQrCodeDataUrl(res.qrCodeDataUrl);
             setTwoFactorMode(true);
             setTwoFactorError('');
             setTwoFactorSuccess('');
-        } catch (err: any) {
-            setTwoFactorError(err.response?.data?.message || 'Не вдалося згенерувати QR код');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setTwoFactorError(e.response?.data?.message || 'Не вдалося згенерувати QR код');
+        } finally {
+            setTwoFactorLoading(false);
         }
     };
 
     const confirmTwoFactorSetup = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || twoFactorLoading) return;
         setTwoFactorError('');
+        setTwoFactorLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/2fa/turn-on`, { token: twoFactorToken }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setTwoFactorSuccess(res.data.message);
+            const res = await authApi.enable2FA(user.token, twoFactorToken);
+            setTwoFactorSuccess(res.message);
             setProfile(prev => prev ? { ...prev, isTwoFactorEnabled: true } : null);
             setTwoFactorMode(false);
             setTwoFactorToken('');
-        } catch (err: any) {
-            setTwoFactorError(err.response?.data?.message || 'Помилка підтвердження 2FA');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setTwoFactorError(e.response?.data?.message || 'Помилка підтвердження 2FA');
+        } finally {
+            setTwoFactorLoading(false);
         }
     };
 
     const disableTwoFactor = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || twoFactorLoading) return;
         setTwoFactorError('');
+        setTwoFactorLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/2fa/turn-off`, { token: twoFactorToken }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setTwoFactorSuccess(res.data.message);
+            const res = await authApi.disable2FA(user.token, twoFactorToken);
+            setTwoFactorSuccess(res.message);
             setProfile(prev => prev ? { ...prev, isTwoFactorEnabled: false } : null);
             setTwoFactorMode(false);
             setTwoFactorToken('');
-        } catch (err: any) {
-            setTwoFactorError(err.response?.data?.message || 'Помилка вимкнення 2FA');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setTwoFactorError(e.response?.data?.message || 'Помилка вимкнення 2FA');
+        } finally {
+            setTwoFactorLoading(false);
         }
     };
 
-    const submitAppeal = async (e: React.FormEvent) => {
+    const handleSubmitAppeal = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || !appealMode || appealLoading) return;
         setAppealError('');
         setAppealSuccess('');
+        setAppealLoading(true);
         try {
-            await axios.post(`${API_URL}/admin/appeals/submit`, {
-                type: appealMode,
-                reason: appealReason
-            }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await profileApi.submitAppeal(user.token, appealMode, appealReason);
             setAppealSuccess('Апеляцію успішно надіслано на розгляд.');
             setAppealMode(null);
             setAppealReason('');
-        } catch (err: any) {
-            setAppealError(err.response?.data?.message || 'Помилка надсилання апеляції');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setAppealError(e.response?.data?.message || 'Помилка надсилання апеляції');
+        } finally {
+            setAppealLoading(false);
         }
     };
+
+    if (loadError) {
+        return (
+            <div className="min-h-screen bg-mafia-dark text-white p-8 flex flex-col items-center justify-center">
+                <p className="text-red-400 mb-4">{loadError}</p>
+                <button onClick={() => navigate(-1)} className="text-mafia-red hover:underline">← Назад</button>
+            </div>
+        );
+    }
 
     if (!profile) return <div className="min-h-screen bg-mafia-dark text-white p-8">{t('common.loading')}</div>;
 
@@ -278,11 +292,14 @@ export function Profile() {
                                     onChange={e => setNewAvatarUrl(e.target.value)}
                                     placeholder="https://example.com/avatar.png"
                                     className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red"
+                                    disabled={avatarSaving}
                                 />
-                                <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                <button type="submit" disabled={avatarSaving} className="bg-mafia-red hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-sm transition flex items-center gap-1">
+                                    {avatarSaving ? <Loader2 size={14} className="animate-spin" /> : null}
                                     {t('common.save')}
                                 </button>
                             </div>
+                            {avatarError && <p className="text-red-400 text-xs mt-2">{avatarError}</p>}
                         </form>
                     )}
 
@@ -320,7 +337,7 @@ export function Profile() {
                             )}
 
                             {appealMode && (
-                                <form onSubmit={submitAppeal} className="bg-[#111] p-4 rounded border border-gray-800">
+                                <form onSubmit={handleSubmitAppeal} className="bg-[#111] p-4 rounded border border-gray-800">
                                     <h4 className="font-bold text-white mb-2">Оскаржити {appealMode === 'UNBAN' ? 'Блокування' : 'Мут'}</h4>
                                     <p className="text-sm text-gray-400 mb-4">Опишіть детально, чому ви вважаєте покарання помилковим або чому воно має бути зняте.</p>
 
@@ -333,9 +350,11 @@ export function Profile() {
                                         placeholder="Детальна причина апеляції..."
                                         required
                                         minLength={10}
+                                        disabled={appealLoading}
                                     />
                                     <div className="flex gap-2">
-                                        <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                        <button type="submit" disabled={appealLoading} className="bg-mafia-red hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-sm transition flex items-center gap-1">
+                                            {appealLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                             Надіслати Апеляцію
                                         </button>
                                         <button type="button" onClick={() => { setAppealMode(null); setAppealError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
@@ -386,8 +405,10 @@ export function Profile() {
                                             onChange={e => setNewEmail(e.target.value)}
                                             placeholder="Введіть ваш email"
                                             className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red"
+                                            disabled={bindEmailLoading}
                                         />
-                                        <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                        <button type="submit" disabled={bindEmailLoading} className="bg-mafia-red hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-sm transition flex items-center gap-1">
+                                            {bindEmailLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                             Зберегти
                                         </button>
                                         <button type="button" onClick={() => { setBindEmailMode(false); setBindEmailError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
@@ -412,8 +433,10 @@ export function Profile() {
                                 {!twoFactorMode && (
                                     <button
                                         onClick={() => profile.isTwoFactorEnabled ? setTwoFactorMode(true) : startTwoFactorSetup()}
-                                        className={`${profile.isTwoFactorEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-mafia-red hover:bg-red-700'} text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap`}
+                                        disabled={twoFactorLoading}
+                                        className={`${profile.isTwoFactorEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-mafia-red hover:bg-red-700'} disabled:opacity-50 text-white px-4 py-2 rounded text-sm font-bold transition whitespace-nowrap flex items-center gap-1`}
                                     >
+                                        {twoFactorLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                         {profile.isTwoFactorEnabled ? 'Вимкнути 2FA' : 'Увімкнути 2FA'}
                                     </button>
                                 )}
@@ -433,8 +456,10 @@ export function Profile() {
                                                 onChange={e => setTwoFactorToken(e.target.value)}
                                                 placeholder="Код з додатка (6 цифр)"
                                                 className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red tracking-widest"
+                                                disabled={twoFactorLoading}
                                             />
-                                            <button type="submit" className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                            <button type="submit" disabled={twoFactorLoading} className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-sm transition flex items-center gap-1">
+                                                {twoFactorLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                                 Підтвердити
                                             </button>
                                             <button type="button" onClick={() => { setTwoFactorMode(false); setTwoFactorError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
@@ -457,8 +482,10 @@ export function Profile() {
                                             onChange={e => setTwoFactorToken(e.target.value)}
                                             placeholder="Код з додатка (6 цифр)"
                                             className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2 rounded text-white text-sm focus:outline-none focus:border-mafia-red tracking-widest"
+                                            disabled={twoFactorLoading}
                                         />
-                                        <button type="submit" className="bg-mafia-red hover:bg-red-700 text-white px-4 py-2 rounded font-bold text-sm transition">
+                                        <button type="submit" disabled={twoFactorLoading} className="bg-mafia-red hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold text-sm transition flex items-center gap-1">
+                                            {twoFactorLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                             Вимкнути
                                         </button>
                                         <button type="button" onClick={() => { setTwoFactorMode(false); setTwoFactorError(''); }} className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded font-bold text-sm transition">
@@ -546,6 +573,11 @@ export function Profile() {
 
                     {isOwnProfile && <>
                         <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase">{t('profile.daily_quests')}</h3>
+                        {questClaimError && (
+                            <div className="mb-3 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2 text-red-300 text-xs">
+                                ❌ {questClaimError}
+                            </div>
+                        )}
                         <div className="space-y-3 mb-8">
                             {quests.map(q => (
                                 <div key={q.id} className="bg-[#111] border border-gray-800 rounded p-3 sm:p-4 flex items-center justify-between gap-3">
@@ -562,7 +594,12 @@ export function Profile() {
                                         {q.claimed ? (
                                             <span className="text-green-500 font-bold text-xs sm:text-sm">{t('profile.completed')}</span>
                                         ) : q.progress >= q.target ? (
-                                            <button onClick={() => claimQuest(q.id)} className="bg-yellow-600 hover:bg-yellow-500 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-bold transition whitespace-nowrap">
+                                            <button
+                                                onClick={() => claimQuest(q.id)}
+                                                disabled={questClaimLoading === q.id}
+                                                className="bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-white px-2 sm:px-3 py-1 rounded text-xs sm:text-sm font-bold transition whitespace-nowrap flex items-center gap-1"
+                                            >
+                                                {questClaimLoading === q.id ? <Loader2 size={12} className="animate-spin" /> : null}
                                                 {t('profile.claim', { reward: q.reward })} <CoinIcon size={14} />
                                             </button>
                                         ) : (
@@ -619,25 +656,25 @@ export function Profile() {
                         <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
                             <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Улюблена роль</p>
                             <p className="text-[14px] sm:text-[18px] font-bold text-blue-400 mt-2 truncate">
-                                {(profile.profile as any)?.favoriteRole || 'НЕМАЄ'}
+                                {profile.profile?.favoriteRole || 'НЕМАЄ'}
                             </p>
                         </div>
                         <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
                             <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Найдовша серія</p>
                             <p className="text-xl sm:text-2xl font-bold text-yellow-500">
-                                {(profile.profile as any)?.maxWinStreak || 0}
+                                {profile.profile?.maxWinStreak || 0}
                             </p>
                         </div>
                         <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
                             <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Середня тривалість гри</p>
                             <p className="text-xl sm:text-2xl font-bold text-white">
-                                {profile.profile?.matches ? (((profile.profile as any)?.totalDuration || 0) / profile.profile.matches).toFixed(1) : 0} дн.
+                                {profile.profile?.matches ? ((profile.profile?.totalDuration || 0) / profile.profile.matches).toFixed(1) : 0} дн.
                             </p>
                         </div>
                         <div className="bg-[#111] p-3 sm:p-4 rounded border border-gray-800 text-center">
                             <p className="text-[10px] sm:text-xs text-gray-500 mb-1">Виживань до кінця</p>
                             <p className="text-xl sm:text-2xl font-bold text-green-400">
-                                {(profile.profile as any)?.survivedMatches || 0}
+                                {profile.profile?.survivedMatches || 0}
                             </p>
                         </div>
                     </div>

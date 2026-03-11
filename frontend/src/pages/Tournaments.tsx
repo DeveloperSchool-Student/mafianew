@@ -1,57 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Trophy, Users, ArrowLeft, Plus, Play, X, Award } from 'lucide-react';
+import { Trophy, Users, ArrowLeft, Plus, Play, X, Award, Loader2 } from 'lucide-react';
 import { CoinIcon } from '../components/CoinIcon';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const STAFF_ROLES = [
-    { key: 'OWNER', power: 9 },
-    { key: 'CURATOR', power: 8 },
-    { key: 'SENIOR_ADMIN', power: 7 },
-    { key: 'ADMIN', power: 6 },
-    { key: 'JUNIOR_ADMIN', power: 5 },
-    { key: 'SENIOR_MOD', power: 4 },
-    { key: 'MOD', power: 3 },
-    { key: 'HELPER', power: 2 },
-    { key: 'TRAINEE', power: 1 },
-];
-
-function getStaffPower(staffRoleKey?: string | null): number {
-    if (!staffRoleKey) return 0;
-    return STAFF_ROLES.find(r => r.key === staffRoleKey)?.power ?? 0;
-}
-
-function headers(token: string) {
-    return { headers: { Authorization: `Bearer ${token}` } };
-}
-
-type Tournament = {
-    id: string;
-    name: string;
-    status: string;
-    maxParticipants: number;
-    prizePool: number;
-    entryFee: number;
-    rules: string | null;
-    createdById: string;
-    startedAt: string | null;
-    endedAt: string | null;
-    createdAt: string;
-    participants: Participant[];
-};
-
-type Participant = {
-    id: string;
-    userId: string;
-    username: string;
-    status: string;
-    wins: number;
-    losses: number;
-    placement: number | null;
-};
+import type { Tournament } from '../types/api';
+import { getStaffPower } from '../types/api';
+import * as tournamentsApi from '../services/tournamentsApi';
 
 export function Tournaments() {
     const { user } = useAppStore();
@@ -62,6 +16,10 @@ export function Tournaments() {
     const [showCreate, setShowCreate] = useState(false);
     const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
 
+    // Inline feedback
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
+
     // Create form
     const [name, setName] = useState('');
     const [maxParticipants, setMaxParticipants] = useState(16);
@@ -69,97 +27,142 @@ export function Tournaments() {
     const [entryFee, setEntryFee] = useState(0);
     const [rules, setRules] = useState('');
 
-
+    // End tournament modal
+    const [showEndModal, setShowEndModal] = useState(false);
+    const [endWinnerId, setEndWinnerId] = useState('');
 
     useEffect(() => {
         if (!user) { navigate('/login'); return; }
         loadTournaments();
     }, [user, navigate, filter]);
 
+    const showFeedback = (type: 'success' | 'error', message: string) => {
+        setFeedback({ type, message });
+        setTimeout(() => setFeedback(null), 4000);
+    };
+
     const loadTournaments = async () => {
         if (!user) return;
         setLoading(true);
         try {
-            const url = filter
-                ? `${API_URL}/tournaments?status=${filter}`
-                : `${API_URL}/tournaments`;
-            const res = await axios.get(url, headers(user.token));
-            setTournaments(res.data);
-        } catch { }
+            const data = await tournamentsApi.fetchTournaments(user.token, filter || undefined);
+            setTournaments(data);
+        } catch {
+            showFeedback('error', 'Не вдалося завантажити турніри');
+        }
         setLoading(false);
     };
 
     const loadTournament = async (id: string) => {
         if (!user) return;
         try {
-            const res = await axios.get(`${API_URL}/tournaments/${id}`, headers(user.token));
-            setSelectedTournament(res.data);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+            const data = await tournamentsApi.fetchTournament(user.token, id);
+            setSelectedTournament(data);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка завантаження турніру');
+        }
     };
 
     const createTournament = async () => {
-        if (!user) return;
+        if (!user || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments`, {
+            await tournamentsApi.createTournament(user.token, {
                 name, maxParticipants, prizePool, entryFee, rules: rules || undefined,
-            }, headers(user.token));
+            });
             setShowCreate(false);
             setName(''); setPrizePool(0); setEntryFee(0); setRules('');
+            showFeedback('success', 'Турнір успішно створено!');
             loadTournaments();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка створення турніру');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const joinTournament = async (id: string) => {
-        if (!user) return;
+        if (!user || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments/${id}/join`, {}, headers(user.token));
-            alert('✅ Ви зареєстровані на турнір!');
+            await tournamentsApi.joinTournament(user.token, id);
+            showFeedback('success', '✅ Ви зареєстровані на турнір!');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка реєстрації');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const leaveTournament = async (id: string) => {
-        if (!user) return;
+        if (!user || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments/${id}/leave`, {}, headers(user.token));
-            alert('Ви покинули турнір.');
+            await tournamentsApi.leaveTournament(user.token, id);
+            showFeedback('success', 'Ви покинули турнір.');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const startTournament = async (id: string) => {
-        if (!user) return;
+        if (!user || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments/${id}/start`, {}, headers(user.token));
-            alert('🎮 Турнір розпочато!');
+            await tournamentsApi.startTournament(user.token, id);
+            showFeedback('success', '🎮 Турнір розпочато!');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
-    const endTournament = async (id: string) => {
-        if (!user) return;
-        const winnerId = prompt('ID переможця (або залиште порожнім):');
+    const handleEndTournament = async (id: string) => {
+        if (!user || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments/${id}/end`, {
-                winnerId: winnerId || undefined,
-            }, headers(user.token));
-            alert('🏆 Турнір завершено!');
+            await tournamentsApi.endTournament(user.token, id, endWinnerId || undefined);
+            showFeedback('success', '🏆 Турнір завершено!');
+            setShowEndModal(false);
+            setEndWinnerId('');
             loadTournaments();
             if (selectedTournament?.id === id) loadTournament(id);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const cancelTournament = async (id: string) => {
-        if (!user || !confirm('Скасувати турнір? Всі внески будуть повернені.')) return;
+        if (!user || !confirm('Скасувати турнір? Всі внески будуть повернені.') || actionLoading) return;
+        setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/tournaments/${id}/cancel`, {}, headers(user.token));
-            alert('Турнір скасовано.');
+            await tournamentsApi.cancelTournament(user.token, id);
+            showFeedback('success', 'Турнір скасовано.');
             loadTournaments();
             setSelectedTournament(null);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     if (!user) return null;
@@ -200,6 +203,17 @@ export function Tournaments() {
             </div>
 
             <div className="max-w-4xl mx-auto p-3 sm:p-6">
+                {/* Inline Feedback */}
+                {feedback && (
+                    <div className={`mb-4 p-3 rounded-lg border text-sm font-medium transition-all ${
+                        feedback.type === 'success' 
+                            ? 'bg-green-900/30 border-green-800/50 text-green-300' 
+                            : 'bg-red-900/30 border-red-800/50 text-red-300'
+                    }`}>
+                        {feedback.message}
+                    </div>
+                )}
+
                 {/* Filters */}
                 <div className="flex gap-2 mb-6 flex-wrap">
                     {['', 'REGISTRATION', 'ACTIVE', 'FINISHED'].map(s => (
@@ -239,9 +253,40 @@ export function Tournaments() {
                                 </div>
                                 <textarea value={rules} onChange={e => setRules(e.target.value)}
                                     placeholder="Правила (необов'язково)" rows={3} className="w-full bg-[#111] border border-gray-700 rounded p-3 text-white text-sm resize-none" />
-                                <button onClick={createTournament}
-                                    className="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded transition">
+                                <button onClick={createTournament} disabled={actionLoading}
+                                    className="w-full bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-black font-bold py-3 rounded transition flex items-center justify-center gap-2">
+                                    {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}
                                     Створити турнір
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* End Tournament Modal (replaces prompt()) */}
+                {showEndModal && selectedTournament && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+                        <div className="bg-[#1a1a1a] border border-gray-700 rounded-xl p-6 w-full max-w-sm">
+                            <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Award size={18} className="text-yellow-500" /> Завершити турнір</h2>
+                            <label className="text-xs text-gray-400 mb-1 block">ID переможця (необов'язково)</label>
+                            <input
+                                type="text"
+                                value={endWinnerId}
+                                onChange={e => setEndWinnerId(e.target.value)}
+                                placeholder="Залиште порожнім, якщо немає"
+                                className="w-full bg-[#111] border border-gray-700 rounded p-3 text-white text-sm mb-4"
+                            />
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleEndTournament(selectedTournament.id)}
+                                    disabled={actionLoading}
+                                    className="flex-1 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-black font-bold py-2.5 rounded transition flex items-center justify-center gap-1"
+                                >
+                                    {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Award size={14} />}
+                                    Завершити
+                                </button>
+                                <button onClick={() => { setShowEndModal(false); setEndWinnerId(''); }} className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 rounded transition">
+                                    Скасувати
                                 </button>
                             </div>
                         </div>
@@ -328,14 +373,16 @@ export function Tournaments() {
                                 {selectedTournament.status === 'REGISTRATION' && (
                                     <>
                                         {selectedTournament.participants.find(p => p.userId === user.id) ? (
-                                            <button onClick={() => leaveTournament(selectedTournament.id)}
-                                                className="text-sm bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-4 py-2 rounded transition">
+                                            <button onClick={() => leaveTournament(selectedTournament.id)} disabled={actionLoading}
+                                                className="text-sm bg-red-900/50 hover:bg-red-700 disabled:opacity-50 border border-red-600 text-red-300 px-4 py-2 rounded transition flex items-center gap-1">
+                                                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                                                 Покинути турнір
                                             </button>
                                         ) : (
-                                            <button onClick={() => joinTournament(selectedTournament.id)}
-                                                className="text-sm bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-4 py-2 rounded transition flex items-center gap-1">
-                                                <Users size={14} /> Зареєструватися
+                                            <button onClick={() => joinTournament(selectedTournament.id)} disabled={actionLoading}
+                                                className="text-sm bg-green-900/50 hover:bg-green-700 disabled:opacity-50 border border-green-600 text-green-300 px-4 py-2 rounded transition flex items-center gap-1">
+                                                {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Users size={14} />}
+                                                Зареєструватися
                                                 {selectedTournament.entryFee > 0 && ` (${selectedTournament.entryFee} 🪙)`}
                                             </button>
                                         )}
@@ -343,22 +390,23 @@ export function Tournaments() {
                                 )}
 
                                 {user.staffRoleKey && selectedTournament.status === 'REGISTRATION' && (
-                                    <button onClick={() => startTournament(selectedTournament.id)}
-                                        className="text-sm bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded font-bold transition flex items-center gap-1">
-                                        <Play size={14} /> Почати турнір
+                                    <button onClick={() => startTournament(selectedTournament.id)} disabled={actionLoading}
+                                        className="text-sm bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 text-black px-4 py-2 rounded font-bold transition flex items-center gap-1">
+                                        {actionLoading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                                        Почати турнір
                                     </button>
                                 )}
 
                                 {user.staffRoleKey && selectedTournament.status === 'ACTIVE' && (
-                                    <button onClick={() => endTournament(selectedTournament.id)}
+                                    <button onClick={() => setShowEndModal(true)}
                                         className="text-sm bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded font-bold transition flex items-center gap-1">
                                         <Award size={14} /> Завершити турнір
                                     </button>
                                 )}
 
                                 {user.staffRoleKey && selectedTournament.status !== 'FINISHED' && selectedTournament.status !== 'CANCELLED' && (
-                                    <button onClick={() => cancelTournament(selectedTournament.id)}
-                                        className="text-sm bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-4 py-2 rounded transition">
+                                    <button onClick={() => cancelTournament(selectedTournament.id)} disabled={actionLoading}
+                                        className="text-sm bg-red-900/50 hover:bg-red-700 disabled:opacity-50 border border-red-600 text-red-300 px-4 py-2 rounded transition">
                                         Скасувати турнір
                                     </button>
                                 )}

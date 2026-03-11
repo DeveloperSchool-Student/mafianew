@@ -9,6 +9,7 @@ import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { ReportModal } from '../components/ReportModal';
 import { DailyRewardModal } from '../components/DailyRewardModal';
 import { LobbyChat } from '../components/LobbyChat';
+import type { RoomSettings } from '../types/api';
 
 const formatTimeAgo = (timestamp: number) => {
     const diff = Date.now() - timestamp;
@@ -58,7 +59,7 @@ export function Lobby() {
         minPlayers: 5,
         maxPlayers: 20
     });
-    const [localSettings, setLocalSettings] = useState({
+    const [localSettings, setLocalSettings] = useState<RoomSettings>({
         dayTimerMs: 60000,
         nightTimerMs: 30000,
         enableSerialKiller: true,
@@ -183,7 +184,7 @@ export function Lobby() {
             });
         });
 
-        newSocket.on('punishment_notification', (data: any) => {
+        newSocket.on('punishment_notification', (data: { type: string; message: string }) => {
             addNotification({
                 type: data.type === 'BAN' ? 'error' : data.type === 'WARN' ? 'warning' : 'info',
                 title: 'Покарання',
@@ -195,7 +196,7 @@ export function Lobby() {
             }
         });
 
-        newSocket.on('staff_role_changed', (data: any) => {
+        newSocket.on('staff_role_changed', (data: { message: string }) => {
             addNotification({
                 type: 'info',
                 title: 'Зміна ролі',
@@ -206,7 +207,7 @@ export function Lobby() {
             useAppStore.getState().fetchCurrentUser();
         });
 
-        newSocket.on('report_resolved', (data: any) => {
+        newSocket.on('report_resolved', (data: { message?: string }) => {
             addNotification({
                 type: 'success',
                 title: 'Оновлення скарги',
@@ -498,7 +499,7 @@ export function Lobby() {
 
                             <select
                                 value={createRoomType}
-                                onChange={e => setCreateRoomType(e.target.value as any)}
+                                onChange={e => setCreateRoomType(e.target.value as 'CASUAL' | 'RANKED')}
                                 className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white mb-3 text-sm focus:border-gray-500 outline-none"
                             >
                                 <option value="CASUAL">🟢 CASUAL (Без MMR)</option>
@@ -715,7 +716,7 @@ export function Lobby() {
                                                     <input
                                                         type="checkbox"
                                                         id={key}
-                                                        checked={(localSettings as any)[key]}
+                                                        checked={localSettings[key] as boolean}
                                                         onChange={e => setLocalSettings(prev => ({ ...prev, [key]: e.target.checked }))}
                                                         className="w-4 h-4 accent-mafia-red"
                                                     />

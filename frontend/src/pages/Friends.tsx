@@ -1,25 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Users, UserPlus, Check, X, Trash2, MessageSquare } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface Friend {
-    id: string;
-    status: 'pending' | 'accepted' | 'blocked';
-    isSender: boolean;
-    friend: {
-        id: string;
-        username: string;
-        profile?: {
-            avatarUrl?: string;
-            level: number;
-        };
-    };
-    createdAt: string;
-}
+import { Users, UserPlus, Check, X, Trash2, MessageSquare, Loader2 } from 'lucide-react';
+import * as friendsApi from '../services/friendsApi';
+import type { Friend } from '../types/api';
 
 export function Friends() {
     const { user, socket, gameState } = useAppStore();
@@ -29,21 +13,26 @@ export function Friends() {
     const [tab, setTab] = useState<'friends' | 'requests'>('friends');
     const [addUsername, setAddUsername] = useState('');
     const [addError, setAddError] = useState('');
+    const [addSuccess, setAddSuccess] = useState('');
+    const [addLoading, setAddLoading] = useState(false);
+
+    // Action feedback
+    const [actionLoading, setActionLoading] = useState<string | null>(null); // friend ID being actioned
+    const [actionError, setActionError] = useState('');
 
     useEffect(() => {
         if (!user) {
             navigate('/login');
             return;
         }
-        fetchFriends();
+        loadFriends();
     }, [user, navigate]);
 
-    const fetchFriends = async () => {
+    const loadFriends = async () => {
+        if (!user) return;
         try {
-            const res = await axios.get(`${API_URL}/friends`, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setFriendsList(res.data);
+            const data = await friendsApi.fetchFriends(user.token);
+            setFriendsList(data);
         } catch (err) {
             console.error('Failed to fetch friends', err);
         } finally {
@@ -53,50 +42,67 @@ export function Friends() {
 
     const handleSendRequest = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!user || !addUsername.trim() || addLoading) return;
         setAddError('');
+        setAddSuccess('');
+        setAddLoading(true);
         try {
-            await axios.post(`${API_URL}/friends/request`, { friendUsername: addUsername }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await friendsApi.sendFriendRequest(user.token, addUsername.trim());
             setAddUsername('');
-            fetchFriends();
-            alert('Запит надіслано!');
-        } catch (err: any) {
-            setAddError(err.response?.data?.message || 'Помилка надсилання запиту');
+            setAddSuccess('Запит на дружбу надіслано!');
+            loadFriends();
+            setTimeout(() => setAddSuccess(''), 3000);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setAddError(e.response?.data?.message || 'Помилка надсилання запиту');
+        } finally {
+            setAddLoading(false);
         }
     };
 
     const handleAccept = async (id: string) => {
+        if (!user || actionLoading) return;
+        setActionLoading(id);
+        setActionError('');
         try {
-            await axios.post(`${API_URL}/friends/accept/${id}`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            fetchFriends();
-        } catch (err) {
-            console.error(err);
+            await friendsApi.acceptFriend(user.token, id);
+            loadFriends();
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setActionError(e.response?.data?.message || 'Помилка прийняття запиту');
+        } finally {
+            setActionLoading(null);
         }
     };
 
     const handleReject = async (id: string) => {
+        if (!user || actionLoading) return;
+        setActionLoading(id);
+        setActionError('');
         try {
-            await axios.post(`${API_URL}/friends/reject/${id}`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            fetchFriends();
-        } catch (err) {
-            console.error(err);
+            await friendsApi.rejectFriend(user.token, id);
+            loadFriends();
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setActionError(e.response?.data?.message || 'Помилка відхилення запиту');
+        } finally {
+            setActionLoading(null);
         }
     };
 
     const handleRemove = async (id: string) => {
+        if (!user || actionLoading) return;
         if (!window.confirm('Ви впевнені, що хочете видалити цього друга?')) return;
+        setActionLoading(id);
+        setActionError('');
         try {
-            await axios.post(`${API_URL}/friends/remove/${id}`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            fetchFriends();
-        } catch (err) {
-            console.error(err);
+            await friendsApi.removeFriend(user.token, id);
+            loadFriends();
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            setActionError(e.response?.data?.message || 'Помилка видалення друга');
+        } finally {
+            setActionLoading(null);
         }
     };
 
@@ -142,7 +148,7 @@ export function Friends() {
                     </div>
 
                     <div className="p-3 sm:p-6">
-                        {/* Форма додавання */}
+                        {/* Add friend form */}
                         <form onSubmit={handleSendRequest} className="mb-6 sm:mb-8 bg-[#111] p-3 sm:p-4 rounded border border-gray-800">
                             <label className="block text-xs sm:text-sm text-gray-400 mb-2 font-bold uppercase tracking-wider flex items-center gap-2"><UserPlus size={16} /> Додати друга</label>
                             <div className="flex flex-col sm:flex-row gap-2">
@@ -152,13 +158,26 @@ export function Friends() {
                                     onChange={e => setAddUsername(e.target.value)}
                                     placeholder="Введіть нікнейм..."
                                     className="flex-1 bg-[#1a1a1a] border border-gray-700 p-2.5 sm:p-3 rounded text-white text-sm focus:outline-none focus:border-blue-500 transition-colors uppercase box-border"
+                                    disabled={addLoading}
                                 />
-                                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded font-bold text-sm transition-colors uppercase tracking-wider">
-                                    Надіслати
+                                <button
+                                    type="submit"
+                                    disabled={addLoading || !addUsername.trim()}
+                                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded font-bold text-sm transition-colors uppercase tracking-wider flex items-center justify-center gap-2"
+                                >
+                                    {addLoading ? <><Loader2 size={14} className="animate-spin" /> Надсилання...</> : 'Надіслати'}
                                 </button>
                             </div>
-                            {addError && <p className="text-red-500 text-xs mt-2 font-bold">{addError}</p>}
+                            {addError && <p className="text-red-500 text-xs mt-2 font-bold">❌ {addError}</p>}
+                            {addSuccess && <p className="text-green-500 text-xs mt-2 font-bold">✅ {addSuccess}</p>}
                         </form>
+
+                        {/* Action-level error */}
+                        {actionError && (
+                            <div className="mb-4 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-2 text-red-300 text-xs">
+                                ❌ {actionError}
+                            </div>
+                        )}
 
                         {loading ? (
                             <div className="p-10 text-center text-gray-500 animate-pulse">Завантаження...</div>
@@ -194,8 +213,13 @@ export function Friends() {
                                                     <button onClick={() => navigate(`/messages/${f.friend.id}`)} className="bg-blue-900/40 hover:bg-blue-700 text-blue-300 p-1.5 sm:p-2 rounded transition-colors border border-blue-600/50" title="Написати">
                                                         <MessageSquare size={16} />
                                                     </button>
-                                                    <button onClick={() => handleRemove(f.id)} className="bg-red-900/40 hover:bg-red-700 text-red-300 p-1.5 sm:p-2 rounded transition-colors border border-red-600/50" title="Видалити">
-                                                        <Trash2 size={16} />
+                                                    <button
+                                                        onClick={() => handleRemove(f.id)}
+                                                        disabled={actionLoading === f.id}
+                                                        className="bg-red-900/40 hover:bg-red-700 disabled:opacity-50 text-red-300 p-1.5 sm:p-2 rounded transition-colors border border-red-600/50"
+                                                        title="Видалити"
+                                                    >
+                                                        {actionLoading === f.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                                                     </button>
                                                 </div>
                                             </div>
@@ -215,10 +239,18 @@ export function Friends() {
                                                 <div key={f.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-blue-900/10 p-3 rounded border border-blue-900/30 gap-2 sm:gap-0">
                                                     <span className="font-bold text-white uppercase text-sm truncate">{f.friend.username}</span>
                                                     <div className="flex gap-2 self-end sm:self-auto flex-shrink-0">
-                                                        <button onClick={() => handleAccept(f.id)} className="bg-green-600 hover:bg-green-500 text-white p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors">
-                                                            <Check size={14} /> Прийняти
+                                                        <button
+                                                            onClick={() => handleAccept(f.id)}
+                                                            disabled={actionLoading === f.id}
+                                                            className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors"
+                                                        >
+                                                            {actionLoading === f.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Прийняти
                                                         </button>
-                                                        <button onClick={() => handleReject(f.id)} className="bg-red-900/50 hover:bg-red-800 text-red-100 p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors border border-red-800">
+                                                        <button
+                                                            onClick={() => handleReject(f.id)}
+                                                            disabled={actionLoading === f.id}
+                                                            className="bg-red-900/50 hover:bg-red-800 disabled:opacity-50 text-red-100 p-1.5 sm:p-2 rounded text-xs px-3 sm:px-4 font-bold flex items-center gap-1 transition-colors border border-red-800"
+                                                        >
                                                             <X size={14} /> Відхилити
                                                         </button>
                                                     </div>
@@ -236,8 +268,12 @@ export function Friends() {
                                             {sentRequests.map(f => (
                                                 <div key={f.id} className="flex items-center justify-between bg-[#111] p-3 rounded border border-gray-800">
                                                     <span className="font-bold text-gray-400 uppercase">{f.friend.username} <span className="text-xs text-gray-600 font-normal normal-case ml-2">(Очікування...)</span></span>
-                                                    <button onClick={() => handleReject(f.id)} className="text-gray-500 hover:text-red-500 text-xs flex items-center gap-1 transition-colors">
-                                                        Скасувати
+                                                    <button
+                                                        onClick={() => handleReject(f.id)}
+                                                        disabled={actionLoading === f.id}
+                                                        className="text-gray-500 hover:text-red-500 disabled:opacity-50 text-xs flex items-center gap-1 transition-colors"
+                                                    >
+                                                        {actionLoading === f.id ? <Loader2 size={12} className="animate-spin" /> : 'Скасувати'}
                                                     </button>
                                                 </div>
                                             ))}
