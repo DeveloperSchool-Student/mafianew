@@ -33,6 +33,7 @@ export interface ProfileData {
     xp?: number;
     level?: number;
     activeFrame?: string;
+    unlockedFrames?: string[];
     title?: string | null;
     mmr?: number;
     bannedUntil?: string | null;

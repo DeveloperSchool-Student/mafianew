@@ -2,24 +2,27 @@ import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { Users, Plus, Shield, LogOut, Swords, Check, X } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { Users, Plus, Shield, LogOut, Swords, Check, X, Loader2 } from 'lucide-react';
+import type { UserProfile } from '../types/api';
+import * as profileApi from '../services/profileApi';
+import * as clansApi from '../services/clansApi';
 
 export function Clans() {
     const { user } = useAppStore();
     const navigate = useNavigate();
-    const [profile, setProfile] = useState<any>(null);
-    const [clans, setClans] = useState<any[]>([]);
-    const [wars, setWars] = useState<any[]>([]);
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [clans, setClans] = useState<clansApi.Clan[]>([]);
+    const [wars, setWars] = useState<clansApi.ClanWar[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showWarModal, setShowWarModal] = useState(false);
-    const [selectedTargetClan, setSelectedTargetClan] = useState<any>(null);
+    const [selectedTargetClan, setSelectedTargetClan] = useState<clansApi.Clan | null>(null);
     const [warBet, setWarBet] = useState<number | ''>('');
     const [newClanName, setNewClanName] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
+    
+    // Inline feedback
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
     useEffect(() => {
         if (!user) {
@@ -29,122 +32,135 @@ export function Clans() {
         fetchData();
     }, [user, navigate]);
 
+    const showFeedback = (type: 'success' | 'error', message: string) => {
+        setFeedback({ type, message });
+        setTimeout(() => setFeedback(null), 4000);
+    };
+
     const fetchData = () => {
+        if (!user) return;
         setLoading(true);
         Promise.all([
-            axios.get(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${user?.token}` } }),
-            axios.get(`${API_URL}/users/clans`, { headers: { Authorization: `Bearer ${user?.token}` } }),
-            axios.get(`${API_URL}/users/clans/wars`, { headers: { Authorization: `Bearer ${user?.token}` } }).catch(() => ({ data: [] }))
+            profileApi.fetchMyProfile(user.token),
+            clansApi.fetchClans(user.token),
+            clansApi.fetchClanWars(user.token).catch(() => [] as clansApi.ClanWar[])
         ]).then(([profileRes, clansRes, warsRes]) => {
-            setProfile(profileRes.data);
-            setClans(clansRes.data);
-            setWars(warsRes.data);
+            setProfile(profileRes);
+            setClans(clansRes);
+            setWars(warsRes);
         }).catch(err => {
             console.error(err);
         }).finally(() => setLoading(false));
     };
 
     const handleCreateClan = async () => {
-        if (!newClanName || newClanName.length < 3) return;
+        if (!user || !newClanName || newClanName.length < 3) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans`, { name: newClanName }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.createClan(user.token, newClanName);
             setShowCreateModal(false);
+            setNewClanName('');
+            showFeedback('success', 'Успішно створено клан!');
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleJoinClan = async (clanName: string) => {
+        if (!user) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/join`, { clanName }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.joinClan(user.token, clanName);
+            showFeedback('success', `Ви успішно вступили до клану ${clanName}!`);
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleLeaveClan = async () => {
-        if (!window.confirm("Ви дійсно хочете покинути клан?")) return;
+        if (!user || !window.confirm("Ви дійсно хочете покинути клан?")) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/leave`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.leaveClan(user.token);
+            showFeedback('success', 'Ви покинули клан.');
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleKick = async (targetId: string) => {
-        if (!window.confirm("Вигнати гравця?")) return;
+        if (!user || !window.confirm("Вигнати гравця?")) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/kick`, { targetUserId: targetId }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.kickClanMember(user.token, targetId);
+            showFeedback('success', 'Гравця вигнано з клану.');
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handlePromote = async (targetId: string, role: string) => {
-        if (!window.confirm(`Змінити роль гравця на ${role}?`)) return;
+        if (!user || !window.confirm(`Змінити роль гравця на ${role}?`)) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/promote`, { targetUserId: targetId, newRole: role }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.promoteClanMember(user.token, targetId, role);
+            showFeedback('success', `Роль гравця змінено на ${role}.`);
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleDeclareWar = async () => {
-        if (!selectedTargetClan || warBet === '') return;
+        if (!user || !selectedTargetClan || warBet === '') return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/war/declare`, {
-                targetClanId: selectedTargetClan.id,
-                customBet: Number(warBet)
-            }, { headers: { Authorization: `Bearer ${user?.token}` } });
+            await clansApi.declareWar(user.token, selectedTargetClan.id, Number(warBet));
             setShowWarModal(false);
+            setWarBet('');
+            showFeedback('success', 'Війну оголошено!');
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
     };
 
     const handleWarAction = async (warId: string, action: 'accept' | 'reject') => {
+        if (!user) return;
         setActionLoading(true);
         try {
-            await axios.post(`${API_URL}/users/clans/war/${warId}/${action}`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await clansApi.answerWar(user.token, warId, action);
+            if (action === 'accept') {
+                showFeedback('success', 'Ви прийняли виклик на війну!');
+            } else {
+                showFeedback('success', 'Ви відхилили війну.');
+            }
             fetchData();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка');
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка');
         } finally {
             setActionLoading(false);
         }
@@ -152,14 +168,25 @@ export function Clans() {
 
     if (loading || !profile) return <div className="min-h-screen bg-mafia-dark text-white p-8">Завантаження...</div>;
 
-    const myClanId = profile.profile?.clanId;
-    const myRole = profile.profile?.clanRole;
+    const myClanId = (profile as any).profile?.clanId; // Temporary bypass if profile data misses clan fields
+    const myRole = (profile as any).profile?.clanRole;
     const canManageWars = myRole === 'OWNER' || myRole === 'OFFICER';
     const myClan = clans.find(c => c.id === myClanId);
     const balance = profile.wallet?.soft || 0;
 
     return (
-        <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center">
+        <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center relative">
+            {feedback && (
+                <div className="fixed top-20 z-50 animate-in fade-in slide-in-from-top-4 shadow-2xl">
+                    <div className={`px-4 py-3 rounded border text-sm font-bold flex items-center gap-2 ${
+                        feedback.type === 'success' ? 'bg-green-900/50 text-green-300 border-green-800' : 'bg-red-900/50 text-red-300 border-red-800'
+                    }`}>
+                        {feedback.type === 'success' ? <Check size={16} /> : '❌'}
+                        {feedback.message}
+                    </div>
+                </div>
+            )}
+
             <div className="w-full max-w-5xl mt-8">
                 <div className="flex justify-between items-center mb-8">
                     <button onClick={() => navigate('/lobby')} className="text-mafia-red hover:underline">&larr; В Лоббі</button>
@@ -191,7 +218,7 @@ export function Clans() {
                                 disabled={actionLoading}
                                 className="bg-red-900/40 hover:bg-red-800 text-red-500 hover:text-white px-4 py-2 rounded font-bold transition flex items-center gap-2 text-sm border border-red-900"
                             >
-                                <LogOut size={16} /> Покинути
+                                {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} Покинути
                             </button>
                         </div>
 
@@ -205,13 +232,14 @@ export function Clans() {
                                     <div className="col-span-3 text-right">Дії</div>
                                 </div>
                                 <div className="divide-y divide-gray-800 text-sm">
-                                    {myClan.members.map((m: any) => {
-                                        const myProfile = myClan.members.find((x: any) => x.userId === profile.id);
-                                        const myRole = myProfile?.clanRole || 'MEMBER';
+                                    {myClan.members.map((m: clansApi.ClanMember) => {
+                                        const isCurrentUser = m.userId === profile.id;
 
                                         return (
                                             <div key={m.id} className="grid grid-cols-12 gap-4 p-3 items-center">
-                                                <div className="col-span-4 font-bold text-white">{m.user?.username || m.userId.substring(0, 8)} {m.userId === profile.id && '(Ви)'}</div>
+                                                <div className="col-span-4 font-bold text-white">
+                                                    {m.user?.username || m.userId.substring(0, 8)} {isCurrentUser && '(Ви)'}
+                                                </div>
                                                 <div className="col-span-3 flex items-center gap-2">
                                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${m.clanRole === 'OWNER' ? 'bg-yellow-900/50 text-yellow-500 border border-yellow-700/50' : m.clanRole === 'OFFICER' ? 'bg-blue-900/50 text-blue-400 border border-blue-700/50' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
                                                         {m.clanRole === 'OWNER' ? 'ЛІДЕР' : m.clanRole === 'OFFICER' ? 'ОФІЦЕР' : 'УЧАСНИК'}
@@ -219,18 +247,18 @@ export function Clans() {
                                                 </div>
                                                 <div className="col-span-2 text-center text-gray-400 font-mono">{m.clanContribution}</div>
                                                 <div className="col-span-3 flex justify-end gap-2 text-xs">
-                                                    {myRole === 'OWNER' && m.userId !== profile.id && (
+                                                    {myRole === 'OWNER' && !isCurrentUser && (
                                                         <>
                                                             {m.clanRole !== 'OFFICER' && (
-                                                                <button onClick={() => handlePromote(m.userId, 'OFFICER')} className="text-blue-400 hover:text-white transition px-2 py-1 bg-blue-900/30 rounded border border-blue-800/50">ДАТИ ОФІЦЕРА</button>
+                                                                <button onClick={() => handlePromote(m.userId, 'OFFICER')} className="text-blue-400 hover:text-white transition px-2 py-1 bg-blue-900/30 rounded border border-blue-800/50">ОФІЦЕР</button>
                                                             )}
                                                             {m.clanRole === 'OFFICER' && (
-                                                                <button onClick={() => handlePromote(m.userId, 'MEMBER')} className="text-gray-400 hover:text-white transition px-2 py-1 bg-gray-800 rounded border border-gray-700">ЗАБРАТИ ОФІЦЕРА</button>
+                                                                <button onClick={() => handlePromote(m.userId, 'MEMBER')} className="text-gray-400 hover:text-white transition px-2 py-1 bg-gray-800 rounded border border-gray-700">ЗАБРАТИ</button>
                                                             )}
                                                             <button onClick={() => handleKick(m.userId)} className="text-red-400 hover:text-white transition px-2 py-1 bg-red-900/30 rounded border border-red-800/50">КИКНУТИ</button>
                                                         </>
                                                     )}
-                                                    {myRole === 'OFFICER' && m.userId !== profile.id && m.clanRole === 'MEMBER' && (
+                                                    {myRole === 'OFFICER' && !isCurrentUser && m.clanRole === 'MEMBER' && (
                                                         <button onClick={() => handleKick(m.userId)} className="text-red-400 hover:text-white transition px-2 py-1 bg-red-900/30 rounded border border-red-800/50">КИКНУТИ</button>
                                                     )}
                                                 </div>
@@ -280,7 +308,7 @@ export function Clans() {
                                             <button
                                                 onClick={() => handleJoinClan(clan.name)}
                                                 disabled={actionLoading}
-                                                className="text-blue-500 hover:text-white bg-blue-900/20 hover:bg-blue-600 px-3 py-1.5 rounded transition font-bold text-sm border border-blue-900/50"
+                                                className="text-blue-500 hover:text-white bg-blue-900/20 hover:bg-blue-600 px-3 py-1.5 rounded transition font-bold text-sm border border-blue-900/50 flex items-center justify-center gap-1"
                                             >
                                                 Вступити
                                             </button>
@@ -311,7 +339,7 @@ export function Clans() {
                             <Swords className="text-red-500" /> Кланові Війни
                         </h3>
                         <div className="space-y-4">
-                            {wars.map((w: any) => {
+                            {wars.map((w: clansApi.ClanWar) => {
                                 const isChallenger = w.challengerId === myClanId;
                                 const myTeamName = isChallenger ? w.challenger?.name : w.target?.name;
                                 const enemyName = isChallenger ? w.target?.name : w.challenger?.name;
@@ -447,8 +475,9 @@ export function Clans() {
                             <button
                                 onClick={handleCreateClan}
                                 disabled={actionLoading || balance < 1000 || newClanName.length < 3}
-                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-bold py-3 rounded transition"
+                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-bold py-3 rounded transition flex justify-center gap-2 items-center"
                             >
+                                {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}
                                 Створити
                             </button>
                         </div>
@@ -491,7 +520,7 @@ export function Clans() {
                                 disabled={actionLoading}
                                 className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 rounded transition flex items-center justify-center gap-2"
                             >
-                                <Swords size={20} /> У Бій!
+                                {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Swords size={20} />} У Бій!
                             </button>
                         </div>
                     </div>

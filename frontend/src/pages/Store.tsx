@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { ShoppingBag, Check } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { ShoppingBag, Check, Loader2 } from 'lucide-react';
+import type { UserProfile } from '../types/api';
+import * as profileApi from '../services/profileApi';
+import * as storeApi from '../services/storeApi';
 
 const STORE_ITEMS = [
     // COMMON (100-500)
@@ -50,8 +50,9 @@ const STORE_ITEMS = [
 export function Store() {
     const { user } = useAppStore();
     const navigate = useNavigate();
-    const [profile, setProfile] = useState<any>(null);
+    const [profile, setProfile] = useState<UserProfile | null>(null);
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
     useEffect(() => {
         if (!user) {
@@ -61,39 +62,46 @@ export function Store() {
         fetchProfile();
     }, [user, navigate]);
 
-    const fetchProfile = () => {
-        axios.get(`${API_URL}/users/me`, {
-            headers: { Authorization: `Bearer ${user?.token}` }
-        })
-            .then(res => setProfile(res.data))
-            .catch(err => console.error(err));
+    const showFeedback = (type: 'success' | 'error', message: string) => {
+        setFeedback({ type, message });
+        setTimeout(() => setFeedback(null), 3000);
+    };
+
+    const fetchProfile = async () => {
+        if (!user) return;
+        try {
+            const data = await profileApi.fetchMyProfile(user.token);
+            setProfile(data);
+        } catch {
+            showFeedback('error', 'Не вдалося завантажити профіль');
+        }
     };
 
     const handleBuy = async (item: typeof STORE_ITEMS[0]) => {
-        if (loadingAction || profile?.wallet?.soft < item.cost) return;
+        if (!user || loadingAction || (profile?.wallet?.soft ?? 0) < item.cost) return;
         setLoadingAction(`buy-${item.id}`);
         try {
-            await axios.post(`${API_URL}/users/store/buy`, { frameId: item.id }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await storeApi.buyFrame(user.token, item.id);
             fetchProfile(); // Refresh profile to get updated balance and unlocks
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка покупки');
+            showFeedback('success', `Успішно придбано: ${item.name}`);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка покупки');
         } finally {
             setLoadingAction(null);
         }
     };
 
     const handleEquip = async (item: typeof STORE_ITEMS[0]) => {
-        if (loadingAction) return;
+        if (!user || loadingAction) return;
         setLoadingAction(`equip-${item.id}`);
         try {
-            await axios.post(`${API_URL}/users/store/equip`, { frameId: item.id }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await storeApi.equipFrame(user.token, item.id);
             fetchProfile();
-        } catch (err: any) {
-            alert(err.response?.data?.message || 'Помилка екіпірування');
+            showFeedback('success', `Екіпіровано: ${item.name}`);
+        } catch (err: unknown) {
+            const e = err as { response?: { data?: { message?: string } } };
+            showFeedback('error', e.response?.data?.message || 'Помилка екіпірування');
         } finally {
             setLoadingAction(null);
         }
@@ -107,6 +115,19 @@ export function Store() {
 
     return (
         <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center">
+            {feedback && (
+                <div className="fixed top-20 z-50 animate-in fade-in slide-in-from-top-4">
+                    <div className={`px-4 py-3 rounded shadow-lg border text-sm font-bold flex items-center gap-2 ${
+                        feedback.type === 'success' 
+                            ? 'bg-green-900/40 text-green-300 border-green-800' 
+                            : 'bg-red-900/40 text-red-300 border-red-800'
+                    }`}>
+                        {feedback.type === 'success' ? <Check size={16} /> : '❌'}
+                        {feedback.message}
+                    </div>
+                </div>
+            )}
+            
             <div className="w-full max-w-4xl mt-8">
                 <div className="flex justify-between items-center mb-8">
                     <button onClick={() => navigate('/lobby')} className="text-mafia-red hover:underline">&larr; В Лоббі</button>
@@ -169,15 +190,15 @@ export function Store() {
                                             disabled={!canAfford || loadingAction !== null}
                                             className={`w-full py-3 rounded font-bold transition flex justify-center items-center gap-2 ${canAfford ? 'bg-green-600 hover:bg-green-500 text-white shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
                                         >
-                                            {loadingAction === `buy-${item.id}` ? '...' : (canAfford ? 'Придбати' : 'Недостатньо монет')}
+                                            {loadingAction === `buy-${item.id}` ? <Loader2 size={16} className="animate-spin" /> : (canAfford ? 'Придбати' : 'Недостатньо монет')}
                                         </button>
                                     ) : (
                                         <button
                                             onClick={() => handleEquip(item)}
                                             disabled={isEquipped || loadingAction !== null}
-                                            className={`w-full py-3 rounded font-bold transition ${isEquipped ? 'bg-green-900/30 text-green-500 cursor-default border border-green-900' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
+                                            className={`w-full flex justify-center items-center gap-2 py-3 rounded font-bold transition flex justify-center items-center gap-2 ${isEquipped ? 'bg-green-900/30 text-green-500 cursor-default border border-green-900' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
                                         >
-                                            {loadingAction === `equip-${item.id}` ? '...' : (isEquipped ? 'Активно' : 'Одягнути')}
+                                            {loadingAction === `equip-${item.id}` ? <Loader2 size={16} className="animate-spin" /> : (isEquipped ? 'Активно' : 'Одягнути')}
                                         </button>
                                     )}
                                 </div>

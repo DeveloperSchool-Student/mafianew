@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '../store';
-import { useNavigate } from 'react-router-dom';
 import { Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -10,10 +9,11 @@ import { BettingPanel } from '../components/BettingPanel';
 import { MobileChatDrawer } from '../components/MobileChatDrawer';
 import { MobileGameHeader } from '../components/MobileGameHeader';
 import { MobileActionStatus } from '../components/MobileActionStatus';
-import { audioManager } from '../utils/audio';
 import { WinAnimation } from '../components/WinAnimation';
-import type { Player, Vote, GameRole, ROLE_ACTION_MAP as RoleActionMapType } from '../types/game';
+import type { Player, Vote, GameRole } from '../types/game';
 import { ROLE_ACTION_MAP } from '../types/game';
+import { useGameSocket } from '../hooks/useGameSocket';
+import { getPhaseLabel, getRoleLabel, getRoleColor, getBgColor } from '../game/gameHelpers';
 
 // Hook to detect mobile viewport
 function useIsMobile(breakpoint = 768) {
@@ -26,76 +26,19 @@ function useIsMobile(breakpoint = 768) {
     return isMobile;
 }
 
-// Phase display name helper
-function getPhaseLabel(phase: string | null, t: (key: string, fallback?: string) => string): string {
-    switch (phase) {
-        case 'ROLE_DISTRIBUTION': return t('game.phase_ROLE_DISTRIBUTION', 'РОЗПОДІЛ РОЛЕЙ');
-        case 'NIGHT': return t('game.phase_NIGHT');
-        case 'DAY_DISCUSSION': return t('game.phase_DAY_DISCUSSION');
-        case 'DAY_VOTING': return t('game.phase_DAY_VOTING');
-        case 'MAYOR_VETO': return t('game.phase_MAYOR_VETO', 'ВЕТО МЕРА');
-        case 'END_GAME': return t('game.phase_END_GAME');
-        default: return phase || t('game.unknown');
-    }
-}
-
-// Role display name helper
-function getRoleLabel(role: string | null, t: (key: string, fallback?: string) => string): string {
-    switch (role) {
-        case 'MAFIA': return t('game.role_MAFIA');
-        case 'DON': return t('game.role_DON');
-        case 'DOCTOR': return t('game.role_DOCTOR');
-        case 'SHERIFF': return t('game.role_SHERIFF');
-        case 'ESCORT': return t('game.role_WHORE');
-        case 'SERIAL_KILLER': return t('game.role_SERIAL_KILLER');
-        case 'JESTER': return t('game.role_JESTER');
-        case 'CITIZEN': return t('game.role_CITIZEN');
-        case 'LAWYER': return t('game.role_LAWYER', 'АДВОКАТ');
-        case 'BODYGUARD': return t('game.role_BODYGUARD', 'ОХОРОНЕЦЬ');
-        case 'TRACKER': return t('game.role_TRACKER', 'СЛІДОПИТ');
-        case 'INFORMER': return t('game.role_INFORMER', 'ІНФОРМАТОР');
-        case 'MAYOR': return t('game.role_MAYOR', 'МЕР');
-        case 'JUDGE': return t('game.role_JUDGE', 'СУДДЯ');
-        case 'BOMBER': return t('game.role_BOMBER', 'ПІДРИВНИК');
-        case 'TRAPPER': return t('game.role_TRAPPER', 'ТРАПЕР');
-        case 'SILENCER': return t('game.role_SILENCER', 'ГЛУШУВАЧ');
-        case 'LOVERS': return t('game.role_LOVERS', 'КОХАНЦІ');
-        case 'WHORE': return t('game.role_WHORE', 'ПОВІЯ');
-        case 'JOURNALIST': return t('game.role_JOURNALIST', 'ЖУРНАЛІСТ');
-        default: return role || t('game.unknown');
-    }
-}
-
-// Role color for mobile header
-function getRoleColor(role: string | null): string {
-    if (role === 'MAFIA' || role === 'DON') return '#ef4444';
-    if (role === 'SHERIFF') return '#eab308';
-    if (role === 'JESTER') return '#f472b6';
-    if (role === 'SERIAL_KILLER') return '#a855f7';
-    return '#60a5fa';
-}
-
-// Background color based on phase
-function getBgColor(phase: string | null): string {
-    if (!phase) return '#0d0d0d';
-    if (phase === 'NIGHT') return '#050505';
-    if (phase === 'DAY_DISCUSSION' || phase === 'DAY_VOTING') return '#1a1a1a';
-    if (phase === 'END_GAME') return '#101910';
-    return '#0d0d0d';
-}
-
 export function Game() {
     const { user, gameState, socket, soundSettings, updateSoundSettings } = useAppStore();
-    const navigate = useNavigate();
     const { t } = useTranslation();
     const isMobile = useIsMobile();
+
+    
+    // Abstracted socket logic
+    const { showPhaseOverlay, overlayPhase } = useGameSocket();
 
     const [donMode, setDonMode] = useState<'KILL' | 'CHECK_DON'>('KILL');
     const [lastWill, setLastWill] = useState('');
     const [showLastWill, setShowLastWill] = useState(false);
     const [showSoundSettings, setShowSoundSettings] = useState(false);
-    const [showPhaseOverlay, setShowPhaseOverlay] = useState(false);
-    const [overlayPhase, setOverlayPhase] = useState<string | null>(null);
 
     // Mobile chat drawer state
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -126,7 +69,7 @@ export function Game() {
             setUnreadCount(0);
             setLastSeenChatLen(gameState.chat?.length || 0);
         }
-    }, [isChatOpen]);
+    }, [isChatOpen, gameState.chat?.length]);
 
     // Reset night action state on phase change
     useEffect(() => {
@@ -134,178 +77,6 @@ export function Game() {
         setNightTargetName('');
         setJournalistTargets([]);
     }, [gameState.phase]);
-
-    // Simple audio player helper
-    const playSound = (soundFile: string) => {
-        if (soundSettings.master === 0 || soundSettings.sfx === 0) return;
-        const audio = new Audio(`/sounds/${soundFile}`);
-        audio.volume = soundSettings.master * soundSettings.sfx;
-        audio.play().catch(() => { });
-    };
-
-    // Ambient background sounds using the AudioManager
-    useEffect(() => {
-        if (!gameState.phase) {
-            audioManager.pauseBgMusic();
-            audioManager.pauseNightSound();
-            return;
-        }
-
-        if (gameState.phase === 'NIGHT') {
-            audioManager.pauseBgMusic();
-            audioManager.playNightSound();
-        } else if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') {
-            audioManager.pauseNightSound();
-            audioManager.playBgMusic();
-        } else {
-            audioManager.pauseBgMusic();
-            audioManager.pauseNightSound();
-        }
-
-        return () => {
-            // Let it keep playing until phase changes
-        };
-    }, [gameState.phase]);
-
-    useEffect(() => {
-        if (!user) {
-            navigate('/login');
-            return;
-        }
-        if (!socket) {
-            navigate('/lobby');
-            return;
-        }
-
-        // Emit check_active_game on mount to catch state updates missed during navigation
-        socket.emit('check_active_game');
-
-        const handleStateUpdate = (newGameState: Record<string, unknown>) => {
-            const oldState = useAppStore.getState().gameState;
-            const newPhase = newGameState.phase as string | null;
-            const newPlayers = newGameState.players as Player[] | undefined;
-
-            if (oldState.phase && newPhase && oldState.phase !== newPhase) {
-                if (newPhase === 'NIGHT') playSound('night.mp3');
-                if (newPhase === 'DAY_DISCUSSION') playSound('day.mp3');
-                if (newPhase === 'DAY_VOTING') playSound('voting.mp3');
-                if (newPhase === 'END_GAME') playSound('win.mp3');
-
-                setOverlayPhase(newPhase);
-                setShowPhaseOverlay(true);
-                setTimeout(() => setShowPhaseOverlay(false), 3000);
-            }
-
-            // Check deaths
-            if (oldState.players?.length) {
-                oldState.players.forEach((oldP: Player) => {
-                    const newP = newPlayers?.find((p: Player) => p.userId === oldP.userId);
-                    if (oldP.isAlive && newP && !newP.isAlive) {
-                        playSound('death.mp3');
-                        audioManager.playShotSound();
-                    }
-                });
-            }
-
-            // Extract myRole from the current user's player entry
-            const currentUserId = useAppStore.getState().user?.id;
-            const me = newPlayers?.find((p: Player) => p.userId === currentUserId);
-            const myRole = (me?.role as string) || oldState.myRole;
-
-            // Preserve chat and roomId that server doesn't send
-            useAppStore.getState().setGameState({
-                ...(newGameState as Partial<typeof oldState>),
-                myRole,
-                chat: oldState.chat,
-                roomId: oldState.roomId || (newGameState.roomId as string | null),
-            });
-        };
-
-        const handleSystemChat = (msg: string) => {
-            const newMsg = { id: Date.now().toString(), sender: 'Система', text: msg, type: 'system' as const };
-            useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
-        };
-
-        const handleChatMessage = (msgData: { sender: string, text: string, type: 'general' | 'mafia' | 'dead' | 'lobby', staffRoleTitle?: string, staffRoleColor?: string }) => {
-            const newMsg = { id: Date.now().toString() + Math.random(), ...msgData };
-            useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
-        };
-
-        const handleGameEnded = () => {
-            // Reset game state and navigate back to lobby
-            setTimeout(() => {
-                useAppStore.getState().setGameState({
-                    phase: null,
-                    players: [],
-                    myRole: null,
-                    timerMs: 0,
-                    chat: [],
-                    votes: [],
-                    bets: [],
-                    roomId: null,
-                    hostId: null,
-                });
-                navigate('/lobby');
-            }, 500);
-        };
-
-        socket.on('game_state_update', handleStateUpdate);
-        socket.on('system_chat', handleSystemChat);
-        socket.on('chat_message', handleChatMessage);
-        socket.on('game_ended', handleGameEnded);
-        socket.on('tick', (data) => {
-            useAppStore.getState().setGameState({ timerMs: data.timerMs, phase: data.phase });
-        });
-
-        return () => {
-            socket.off('game_state_update', handleStateUpdate);
-            socket.off('system_chat', handleSystemChat);
-            socket.off('chat_message', handleChatMessage);
-            socket.off('game_ended', handleGameEnded);
-            socket.off('tick');
-        };
-    }, [user, socket, navigate]);
-
-    // Title Alert for background tabs
-    useEffect(() => {
-        let blinkInterval: number | undefined;
-        let isOriginalTitle = true;
-        const originalTitle = 'Mafia Online';
-
-        const me = gameState.players?.find(p => p.userId === user?.id);
-        const isMyTurn = me?.isAlive && (
-            gameState.phase === 'DAY_VOTING' ||
-            (gameState.phase === 'NIGHT' && gameState.myRole !== 'CITIZEN' && gameState.myRole !== 'JESTER')
-        );
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden' && isMyTurn) {
-                blinkInterval = setInterval(() => {
-                    document.title = isOriginalTitle ? '🔴 Твій хід!' : originalTitle;
-                    isOriginalTitle = !isOriginalTitle;
-                }, 1000);
-            } else {
-                clearInterval(blinkInterval);
-                document.title = originalTitle;
-            }
-        };
-
-        // Run once on phase change if already hidden
-        if (document.visibilityState === 'hidden' && isMyTurn) {
-            handleVisibilityChange();
-        } else {
-            document.title = originalTitle;
-        }
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            clearInterval(blinkInterval);
-            document.title = originalTitle;
-        };
-    }, [gameState.phase, gameState.players, user?.id]);
-
 
     const submitLastWill = () => {
         if (!socket || !gameState.roomId) return;
