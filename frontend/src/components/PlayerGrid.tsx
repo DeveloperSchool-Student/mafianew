@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
 import { WhisperModal, ReportInGameModal } from './GameModals';
+import { submitReport } from '../services/gameApi';
+import type { Player, Vote } from '../types/game';
 
 interface PlayerGridProps {
     handleAction: (targetId: string) => void;
@@ -24,27 +26,27 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
 
     // Count votes per player
     const getVoteCount = (targetId: string): number => {
-        return gameState.votes?.filter(v => v.targetId === targetId).length || 0;
+        return gameState.votes?.filter((v: Vote) => v.targetId === targetId).length || 0;
     };
 
-    const me = gameState.players?.find(p => p.userId === user?.id);
-    const hasVoted = gameState.votes?.some((v: any) => v.voterId === user?.id);
+    const me = gameState.players?.find((p: Player) => p.userId === user?.id);
+    const hasVoted = gameState.votes?.some((v: Vote) => v.voterId === user?.id);
 
     const handleWhisperSend = (message: string) => {
         if (!whisperTarget || !socket || !gameState.roomId) return;
         socket.emit('whisper', { roomId: gameState.roomId, targetId: whisperTarget.userId, message });
     };
 
-    const handleReportSubmit = (reason: string, screenshotUrl?: string) => {
-        if (!reportTarget) return;
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const handleReportSubmit = async (reason: string, screenshotUrl?: string): Promise<{ success: boolean; error?: string }> => {
+        if (!reportTarget) return { success: false, error: 'Не вдалося знайти ціль скарги' };
         const token = useAppStore.getState().user?.token;
-        if (!token) return;
-        fetch(`${API_URL}/admin/reports`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ targetUsername: reportTarget.username, reason, screenshotUrl }),
-        }).catch(() => { });
+        if (!token) return { success: false, error: 'Ви не авторизовані' };
+
+        return submitReport(token, {
+            targetUsername: reportTarget.username,
+            reason,
+            screenshotUrl,
+        });
     };
 
     return (
@@ -52,7 +54,7 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
             <div className="bg-mafia-gray border border-gray-800 rounded p-3 sm:p-4 h-auto md:h-[600px] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">ГРАВЦІ ({gameState.players?.length || 0})</h3>
                 <div className="space-y-2 sm:space-y-3">
-                    {gameState.players?.map((p: any, idx: number) => {
+                    {gameState.players?.map((p: Player, idx: number) => {
                         const voteCount = getVoteCount(p.userId);
                         const isSelectedByJournalist = selectedJournalistTargets.includes(p.userId);
                         const isDisabledByVote = hasVoted && gameState.phase === 'DAY_VOTING';

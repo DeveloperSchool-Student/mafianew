@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../store';
+import type { ChatMessage } from '../types/game';
 
 interface ChatPanelProps {
     donMode: 'KILL' | 'CHECK_DON';
@@ -121,7 +122,7 @@ export function ChatPanel({
             <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col min-h-0">
                 {activeTab === 'chat' || activeTab === 'dead_chat' ? (
                     <div className="flex flex-col gap-2 mt-auto">
-                        {gameState.chat?.filter(msg => activeTab === 'dead_chat' ? msg.type === 'dead' || msg.type === 'system' : msg.type !== 'dead').map(msg => (
+                        {gameState.chat?.filter((msg: ChatMessage) => activeTab === 'dead_chat' ? msg.type === 'dead' || msg.type === 'system' : msg.type !== 'dead').map((msg: ChatMessage) => (
                             <div key={msg.id} className={`p-2 rounded text-sm ${msg.type === 'system' ? 'bg-[#1a1a1a] text-gray-400 border-l-2 border-mafia-red' :
                                 msg.type === 'mafia' ? 'bg-red-900/20 text-red-200 border-l-2 border-red-500' :
                                     msg.type === 'dead' ? 'bg-gray-900 text-gray-500 italic' :
@@ -129,19 +130,19 @@ export function ChatPanel({
                                 }`}>
                                 {msg.type !== 'system' && <span className="font-bold mr-2 opacity-70">
                                     {msg.type === 'dead' && '[Мертві/Глядачі] '}
-                                    {(msg as any).staffRoleTitle && (msg as any).staffRoleColor && (
+                                    {msg.staffRoleTitle && msg.staffRoleColor && (
                                         <span
                                             className="text-[10px] font-bold px-1 py-0.5 rounded mr-1 align-middle"
                                             style={{
-                                                color: (msg as any).staffRoleColor,
-                                                backgroundColor: (msg as any).staffRoleColor + '22',
-                                                border: `1px solid ${(msg as any).staffRoleColor}55`,
+                                                color: msg.staffRoleColor,
+                                                backgroundColor: msg.staffRoleColor + '22',
+                                                border: `1px solid ${msg.staffRoleColor}55`,
                                             }}
                                         >
-                                            {(msg as any).staffRoleTitle}
+                                            {msg.staffRoleTitle}
                                         </span>
                                     )}
-                                    <span style={(msg as any).staffRoleColor ? { color: (msg as any).staffRoleColor } : undefined}>
+                                    <span style={msg.staffRoleColor ? { color: msg.staffRoleColor } : undefined}>
                                         {msg.sender}
                                     </span>:</span>}
                                 <span>{msg.text}</span>

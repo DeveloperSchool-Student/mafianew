@@ -12,6 +12,8 @@ import { MobileGameHeader } from '../components/MobileGameHeader';
 import { MobileActionStatus } from '../components/MobileActionStatus';
 import { audioManager } from '../utils/audio';
 import { WinAnimation } from '../components/WinAnimation';
+import type { Player, Vote, GameRole, ROLE_ACTION_MAP as RoleActionMapType } from '../types/game';
+import { ROLE_ACTION_MAP } from '../types/game';
 
 // Hook to detect mobile viewport
 function useIsMobile(breakpoint = 768) {
@@ -22,6 +24,64 @@ function useIsMobile(breakpoint = 768) {
         return () => window.removeEventListener('resize', handler);
     }, [breakpoint]);
     return isMobile;
+}
+
+// Phase display name helper
+function getPhaseLabel(phase: string | null, t: (key: string, fallback?: string) => string): string {
+    switch (phase) {
+        case 'ROLE_DISTRIBUTION': return t('game.phase_ROLE_DISTRIBUTION', 'РОЗПОДІЛ РОЛЕЙ');
+        case 'NIGHT': return t('game.phase_NIGHT');
+        case 'DAY_DISCUSSION': return t('game.phase_DAY_DISCUSSION');
+        case 'DAY_VOTING': return t('game.phase_DAY_VOTING');
+        case 'MAYOR_VETO': return t('game.phase_MAYOR_VETO', 'ВЕТО МЕРА');
+        case 'END_GAME': return t('game.phase_END_GAME');
+        default: return phase || t('game.unknown');
+    }
+}
+
+// Role display name helper
+function getRoleLabel(role: string | null, t: (key: string, fallback?: string) => string): string {
+    switch (role) {
+        case 'MAFIA': return t('game.role_MAFIA');
+        case 'DON': return t('game.role_DON');
+        case 'DOCTOR': return t('game.role_DOCTOR');
+        case 'SHERIFF': return t('game.role_SHERIFF');
+        case 'ESCORT': return t('game.role_WHORE');
+        case 'SERIAL_KILLER': return t('game.role_SERIAL_KILLER');
+        case 'JESTER': return t('game.role_JESTER');
+        case 'CITIZEN': return t('game.role_CITIZEN');
+        case 'LAWYER': return t('game.role_LAWYER', 'АДВОКАТ');
+        case 'BODYGUARD': return t('game.role_BODYGUARD', 'ОХОРОНЕЦЬ');
+        case 'TRACKER': return t('game.role_TRACKER', 'СЛІДОПИТ');
+        case 'INFORMER': return t('game.role_INFORMER', 'ІНФОРМАТОР');
+        case 'MAYOR': return t('game.role_MAYOR', 'МЕР');
+        case 'JUDGE': return t('game.role_JUDGE', 'СУДДЯ');
+        case 'BOMBER': return t('game.role_BOMBER', 'ПІДРИВНИК');
+        case 'TRAPPER': return t('game.role_TRAPPER', 'ТРАПЕР');
+        case 'SILENCER': return t('game.role_SILENCER', 'ГЛУШУВАЧ');
+        case 'LOVERS': return t('game.role_LOVERS', 'КОХАНЦІ');
+        case 'WHORE': return t('game.role_WHORE', 'ПОВІЯ');
+        case 'JOURNALIST': return t('game.role_JOURNALIST', 'ЖУРНАЛІСТ');
+        default: return role || t('game.unknown');
+    }
+}
+
+// Role color for mobile header
+function getRoleColor(role: string | null): string {
+    if (role === 'MAFIA' || role === 'DON') return '#ef4444';
+    if (role === 'SHERIFF') return '#eab308';
+    if (role === 'JESTER') return '#f472b6';
+    if (role === 'SERIAL_KILLER') return '#a855f7';
+    return '#60a5fa';
+}
+
+// Background color based on phase
+function getBgColor(phase: string | null): string {
+    if (!phase) return '#0d0d0d';
+    if (phase === 'NIGHT') return '#050505';
+    if (phase === 'DAY_DISCUSSION' || phase === 'DAY_VOTING') return '#1a1a1a';
+    if (phase === 'END_GAME') return '#101910';
+    return '#0d0d0d';
 }
 
 export function Game() {
@@ -120,23 +180,26 @@ export function Game() {
         // Emit check_active_game on mount to catch state updates missed during navigation
         socket.emit('check_active_game');
 
-        const handleStateUpdate = (newGameState: any) => {
+        const handleStateUpdate = (newGameState: Record<string, unknown>) => {
             const oldState = useAppStore.getState().gameState;
-            if (oldState.phase && newGameState.phase && oldState.phase !== newGameState.phase) {
-                if (newGameState.phase === 'NIGHT') playSound('night.mp3');
-                if (newGameState.phase === 'DAY_DISCUSSION') playSound('day.mp3');
-                if (newGameState.phase === 'DAY_VOTING') playSound('voting.mp3');
-                if (newGameState.phase === 'END_GAME') playSound('win.mp3');
+            const newPhase = newGameState.phase as string | null;
+            const newPlayers = newGameState.players as Player[] | undefined;
 
-                setOverlayPhase(newGameState.phase);
+            if (oldState.phase && newPhase && oldState.phase !== newPhase) {
+                if (newPhase === 'NIGHT') playSound('night.mp3');
+                if (newPhase === 'DAY_DISCUSSION') playSound('day.mp3');
+                if (newPhase === 'DAY_VOTING') playSound('voting.mp3');
+                if (newPhase === 'END_GAME') playSound('win.mp3');
+
+                setOverlayPhase(newPhase);
                 setShowPhaseOverlay(true);
                 setTimeout(() => setShowPhaseOverlay(false), 3000);
             }
 
             // Check deaths
             if (oldState.players?.length) {
-                oldState.players.forEach((oldP: any) => {
-                    const newP = newGameState.players?.find((p: any) => p.userId === oldP.userId);
+                oldState.players.forEach((oldP: Player) => {
+                    const newP = newPlayers?.find((p: Player) => p.userId === oldP.userId);
                     if (oldP.isAlive && newP && !newP.isAlive) {
                         playSound('death.mp3');
                         audioManager.playShotSound();
@@ -146,15 +209,15 @@ export function Game() {
 
             // Extract myRole from the current user's player entry
             const currentUserId = useAppStore.getState().user?.id;
-            const me = newGameState.players?.find((p: any) => p.userId === currentUserId);
-            const myRole = me?.role || oldState.myRole;
+            const me = newPlayers?.find((p: Player) => p.userId === currentUserId);
+            const myRole = (me?.role as string) || oldState.myRole;
 
             // Preserve chat and roomId that server doesn't send
             useAppStore.getState().setGameState({
-                ...newGameState,
+                ...(newGameState as Partial<typeof oldState>),
                 myRole,
                 chat: oldState.chat,
-                roomId: oldState.roomId || newGameState.roomId,
+                roomId: oldState.roomId || (newGameState.roomId as string | null),
             });
         };
 
@@ -163,7 +226,7 @@ export function Game() {
             useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
         };
 
-        const handleChatMessage = (msgData: { sender: string, text: string, type: 'general' | 'mafia' | 'dead' | 'lobby' }) => {
+        const handleChatMessage = (msgData: { sender: string, text: string, type: 'general' | 'mafia' | 'dead' | 'lobby', staffRoleTitle?: string, staffRoleColor?: string }) => {
             const newMsg = { id: Date.now().toString() + Math.random(), ...msgData };
             useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
         };
@@ -258,7 +321,7 @@ export function Game() {
 
         if (gameState.phase === 'DAY_VOTING') {
             // Check if already voted
-            const alreadyVoted = gameState.votes?.some((v: any) => v.voterId === user?.id);
+            const alreadyVoted = gameState.votes?.some((v: Vote) => v.voterId === user?.id);
             if (alreadyVoted) {
                 // Notify user they already voted
                 const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Ви вже проголосували! Змінити голос неможливо.', type: 'system' as const };
@@ -267,27 +330,20 @@ export function Game() {
             }
             socket.emit('vote', { roomId: gameState.roomId, targetId });
         } else if (gameState.phase === 'NIGHT') {
-            let actionType = '';
-            if (gameState.myRole === 'MAFIA') actionType = 'KILL';
-            if (gameState.myRole === 'DON') actionType = donMode;
-            if (gameState.myRole === 'DOCTOR') actionType = 'HEAL';
-            if (gameState.myRole === 'SHERIFF') actionType = 'CHECK';
-            if (gameState.myRole === 'ESCORT') actionType = 'BLOCK';
-            if (gameState.myRole === 'SERIAL_KILLER') actionType = 'KILL_SERIAL';
-            if (gameState.myRole === 'LAWYER') actionType = 'DEFEND';
-            if (gameState.myRole === 'BODYGUARD') actionType = 'GUARD';
-            if (gameState.myRole === 'TRACKER') actionType = 'TRACK';
-            if (gameState.myRole === 'INFORMER') actionType = 'INFORM';
-            if (gameState.myRole === 'BOMBER') actionType = 'BOMB';
-            if (gameState.myRole === 'TRAPPER') actionType = 'TRAP';
-            if (gameState.myRole === 'SILENCER') actionType = 'SILENCE';
-            if (gameState.myRole === 'WHORE') actionType = 'BLOCK';
-            if (gameState.myRole === 'JOURNALIST') actionType = 'COMPARE';
+            // Determine action type from role using the map
+            let actionType: string = '';
+            const myRole = gameState.myRole as GameRole | null;
+
+            if (myRole === 'DON') {
+                actionType = donMode; // DON has dual mode
+            } else if (myRole && myRole in ROLE_ACTION_MAP) {
+                actionType = ROLE_ACTION_MAP[myRole] || '';
+            }
 
             if (actionType) {
                 socket.emit('night_action', { roomId: gameState.roomId, targetId, actionType });
                 // Track night action for feedback
-                const targetPlayer = gameState.players?.find((p: any) =>
+                const targetPlayer = gameState.players?.find((p: Player) =>
                     targetId.includes(',') ? targetId.split(',').includes(p.userId) : p.userId === targetId
                 );
                 setHasActedNight(true);
@@ -299,17 +355,17 @@ export function Game() {
 
     const me = gameState.players?.find(p => p.userId === user?.id);
     const isGameOver = gameState.phase === 'END_GAME';
-    const hasVoted = gameState.votes?.some((v: any) => v.voterId === user?.id) || false;
+    const hasVoted = gameState.votes?.some((v: Vote) => v.voterId === user?.id) || false;
 
     // Find voted target name for feedback
-    const votedTarget = gameState.votes?.find((v: any) => v.voterId === user?.id);
-    const votedTargetPlayer = votedTarget ? gameState.players?.find((p: any) => p.userId === votedTarget.targetId) : null;
+    const votedTarget = gameState.votes?.find((v: Vote) => v.voterId === user?.id);
+    const votedTargetPlayer = votedTarget ? gameState.players?.find((p: Player) => p.userId === votedTarget.targetId) : null;
     const votedTargetName = votedTarget?.targetId === 'SKIP' ? 'Пропуск' : votedTargetPlayer?.username;
 
     // Parse winner from chat
     let winner = null;
     if (isGameOver) {
-        const winMsg = gameState.chat.find((m: any) => m.type === 'system' && m.text.includes('ПЕРЕМОГА:'));
+        const winMsg = gameState.chat.find(m => m.type === 'system' && m.text.includes('ПЕРЕМОГА:'));
         if (winMsg) {
             const match = winMsg.text.match(/ПЕРЕМОГА: (СЕРІЙНИЙ ВБИВЦЯ|МАФІЯ|МИРНІ|БЛАЗЕНЬ|МАНІЯК)/);
             if (match) winner = match[1];
@@ -320,64 +376,9 @@ export function Game() {
         return <div className="p-8 text-center bg-mafia-dark text-white min-h-screen">Loading Game...</div>;
     }
 
-    // Phase display name in Ukrainian
-    const phaseLabel = (phase: string | null) => {
-        switch (phase) {
-            case 'ROLE_DISTRIBUTION': return t('game.phase_ROLE_DISTRIBUTION', 'РОЗПОДІЛ РОЛЕЙ');
-            case 'NIGHT': return t('game.phase_NIGHT');
-            case 'DAY_DISCUSSION': return t('game.phase_DAY_DISCUSSION');
-            case 'DAY_VOTING': return t('game.phase_DAY_VOTING');
-            case 'MAYOR_VETO': return t('game.phase_MAYOR_VETO', 'ВЕТО МЕРА');
-            case 'END_GAME': return t('game.phase_END_GAME');
-            default: return phase || t('game.unknown');
-        }
-    };
-
-    // Role display name in Ukrainian
-    const roleLabel = (role: string | null) => {
-        switch (role) {
-            case 'MAFIA': return t('game.role_MAFIA');
-            case 'DON': return t('game.role_DON');
-            case 'DOCTOR': return t('game.role_DOCTOR');
-            case 'SHERIFF': return t('game.role_SHERIFF');
-            case 'ESCORT': return t('game.role_WHORE');
-            case 'SERIAL_KILLER': return t('game.role_SERIAL_KILLER');
-            case 'JESTER': return t('game.role_JESTER');
-            case 'CITIZEN': return t('game.role_CITIZEN');
-            case 'LAWYER': return t('game.role_LAWYER', 'АДВОКАТ');
-            case 'BODYGUARD': return t('game.role_BODYGUARD', 'ОХОРОНЕЦЬ');
-            case 'TRACKER': return t('game.role_TRACKER', 'СЛІДОПИТ');
-            case 'INFORMER': return t('game.role_INFORMER', 'ІНФОРМАТОР');
-            case 'MAYOR': return t('game.role_MAYOR', 'МЕР');
-            case 'JUDGE': return t('game.role_JUDGE', 'СУДДЯ');
-            case 'BOMBER': return t('game.role_BOMBER', 'ПІДРИВНИК');
-            case 'TRAPPER': return t('game.role_TRAPPER', 'ТРАПЕР');
-            case 'SILENCER': return t('game.role_SILENCER', 'ГЛУШУВАЧ');
-            case 'LOVERS': return t('game.role_LOVERS', 'КОХАНЦІ');
-            case 'WHORE': return t('game.role_WHORE', 'ПОВІЯ');
-            case 'JOURNALIST': return t('game.role_JOURNALIST', 'ЖУРНАЛІСТ');
-            default: return role || t('game.unknown');
-        }
-    };
-
-    // Role color for mobile header
-    const getRoleColor = () => {
-        const role = gameState.myRole;
-        if (role === 'MAFIA' || role === 'DON') return '#ef4444';
-        if (role === 'SHERIFF') return '#eab308';
-        if (role === 'JESTER') return '#f472b6';
-        if (role === 'SERIAL_KILLER') return '#a855f7';
-        return '#60a5fa';
-    };
-
-    // Determine background color based on phase
-    const getBgColor = () => {
-        if (!gameState.phase) return 'bg-mafia-dark';
-        if (gameState.phase === 'NIGHT') return 'bg-[#050505]';
-        if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') return 'bg-[#1a1a1a]';
-        if (gameState.phase === 'END_GAME') return 'bg-[#101910]';
-        return 'bg-mafia-dark';
-    };
+    // Bound helpers for this render
+    const phaseLabel = (phase: string | null) => getPhaseLabel(phase, t);
+    const roleLabel = (role: string | null) => getRoleLabel(role, t);
 
     // Chat panel props (shared between desktop and mobile drawer)
     const chatPanelProps = {
@@ -392,7 +393,7 @@ export function Game() {
 
     return (
         <motion.div
-            animate={{ backgroundColor: getBgColor() === 'bg-[#050505]' ? '#050505' : getBgColor() === 'bg-[#1a1a1a]' ? '#1a1a1a' : getBgColor() === 'bg-[#101910]' ? '#101910' : '#0d0d0d' }}
+            animate={{ backgroundColor: getBgColor(gameState.phase) }}
             transition={{ duration: 2, ease: "easeInOut" }}
             className={`text-mafia-light flex flex-col items-center ${isMobile ? 'h-[100dvh] overflow-hidden' : 'min-h-screen py-6 px-4'}`}
         >
@@ -438,7 +439,7 @@ export function Game() {
                         phaseLabel={phaseLabel(gameState.phase)}
                         timerMs={gameState.timerMs || 0}
                         roleLabel={roleLabel(gameState.myRole)}
-                        roleColor={getRoleColor()}
+                        roleColor={getRoleColor(gameState.myRole)}
                         isGameOver={isGameOver}
                         isSpectator={me?.isSpectator || false}
                         isMuted={soundSettings.master === 0}
@@ -446,7 +447,7 @@ export function Game() {
                     />
 
                     {/* Mayor Veto Prompt - Mobile */}
-                    {gameState.phase === 'MAYOR_VETO' && gameState.myRole === 'MAYOR' && me?.isAlive && !(gameState as any).mayorVetoUsed && (
+                    {gameState.phase === 'MAYOR_VETO' && gameState.myRole === 'MAYOR' && me?.isAlive && !gameState.mayorVetoUsed && (
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
@@ -492,7 +493,7 @@ export function Game() {
                         />
                     </div>
 
-                    {/* Mobile Chat Drawer */}
+                    {/* Mobile Chat Drawer — always mounted to preserve state */}
                     <MobileChatDrawer
                         isOpen={isChatOpen}
                         onToggle={() => setIsChatOpen(prev => !prev)}
@@ -551,7 +552,7 @@ export function Game() {
                     </div>
 
                     {/* Mayor Veto Prompt */}
-                    {gameState.phase === 'MAYOR_VETO' && gameState.myRole === 'MAYOR' && me?.isAlive && !(gameState as any).mayorVetoUsed && (
+                    {gameState.phase === 'MAYOR_VETO' && gameState.myRole === 'MAYOR' && me?.isAlive && !gameState.mayorVetoUsed && (
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}

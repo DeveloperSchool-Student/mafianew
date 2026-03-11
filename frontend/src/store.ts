@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Socket } from 'socket.io-client';
+import type { Player, Vote, Bet, ChatMessage } from './types/game';
 
 export interface User {
     id: string;
@@ -13,24 +14,22 @@ export interface User {
     wallet?: { soft: number, hard: number };
 }
 
-export interface ChatMessage {
-    id: string;
-    sender: string;
-    text: string;
-    type: 'system' | 'general' | 'mafia' | 'dead' | 'lobby';
-}
+// ChatMessage is now imported from types/game.ts
+export type { ChatMessage } from './types/game';
 
 export interface GameState {
     roomId: string | null;
     hostId: string | null;
     type?: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
     phase: string | null;
-    players: any[];
+    players: Player[];
     myRole: string | null;
     timerMs: number;
     chat: ChatMessage[];
-    votes: any[];
-    bets: any[];
+    votes: Vote[];
+    bets: Bet[];
+    mayorVetoUsed?: boolean;
+    pendingExecutionId?: string | null;
     settings?: {
         dayTimerMs: number;
         nightTimerMs: number;

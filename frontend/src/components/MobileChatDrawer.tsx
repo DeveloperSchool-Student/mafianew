@@ -68,58 +68,71 @@ export function MobileChatDrawer({ isOpen, onToggle, unreadCount, children }: Mo
                 )}
             </AnimatePresence>
 
-            {/* Drawer */}
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        ref={drawerRef}
-                        initial={{ y: '100%' }}
-                        animate={{ y: 0 }}
-                        exit={{ y: '100%' }}
-                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                        drag="y"
-                        dragConstraints={{ top: 0, bottom: 0 }}
-                        dragElastic={0.2}
-                        onDragEnd={(_e, info) => {
-                            if (info.offset.y > 100 || info.velocity.y > 500) {
+            {/* Drawer container — always mounted to preserve ChatPanel state.
+                 Uses translate + visibility for hiding so children keep their state
+                 (scroll position, input drafts, activeTab, notepad). */}
+            <div
+                ref={drawerRef}
+                className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#0d0d0d] border-t border-gray-700 rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)]"
+                style={{
+                    transform: isOpen
+                        ? `translateY(${dragY > 0 ? dragY : 0}px)`
+                        : 'translateY(100%)',
+                    visibility: isOpen ? 'visible' : 'hidden',
+                    transition: isOpen
+                        ? (dragY > 0 ? 'none' : 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s')
+                        : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0.3s',
+                }}
+                id="mobile-chat-drawer"
+            >
+                {/* Drag Handle */}
+                <div
+                    className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing shrink-0"
+                    onTouchStart={(e) => {
+                        const startY = e.touches[0].clientY;
+                        let currentDragY = 0;
+
+                        const onMove = (ev: TouchEvent) => {
+                            currentDragY = Math.max(0, ev.touches[0].clientY - startY);
+                            setDragY(currentDragY);
+                        };
+
+                        const onEnd = () => {
+                            if (currentDragY > 100) {
                                 onToggle();
                             }
                             setDragY(0);
-                        }}
-                        onDrag={(_e, info) => {
-                            setDragY(Math.max(0, info.offset.y));
-                        }}
-                        style={{ y: dragY > 0 ? dragY : undefined }}
-                        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#0d0d0d] border-t border-gray-700 rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)]"
-                        id="mobile-chat-drawer"
+                            document.removeEventListener('touchmove', onMove);
+                            document.removeEventListener('touchend', onEnd);
+                        };
+
+                        document.addEventListener('touchmove', onMove, { passive: true });
+                        document.addEventListener('touchend', onEnd);
+                    }}
+                >
+                    <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
+                </div>
+
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <MessageCircle size={16} className="text-gray-400" />
+                        <span className="text-sm font-bold text-gray-200 uppercase tracking-wider">Чат</span>
+                    </div>
+                    <button
+                        onClick={onToggle}
+                        className="p-2 rounded-full hover:bg-gray-800 transition-colors active:scale-95"
+                        style={{ minWidth: 40, minHeight: 40 }}
                     >
-                        {/* Drag Handle */}
-                        <div className="flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing shrink-0">
-                            <div className="w-10 h-1 bg-gray-600 rounded-full"></div>
-                        </div>
+                        <X size={18} className="text-gray-400" />
+                    </button>
+                </div>
 
-                        {/* Drawer Header */}
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <MessageCircle size={16} className="text-gray-400" />
-                                <span className="text-sm font-bold text-gray-200 uppercase tracking-wider">Чат</span>
-                            </div>
-                            <button
-                                onClick={onToggle}
-                                className="p-2 rounded-full hover:bg-gray-800 transition-colors active:scale-95"
-                                style={{ minWidth: 40, minHeight: 40 }}
-                            >
-                                <X size={18} className="text-gray-400" />
-                            </button>
-                        </div>
-
-                        {/* Chat Content - takes ~70% of viewport */}
-                        <div className="flex-1 overflow-hidden" style={{ height: '65dvh', maxHeight: '65dvh' }}>
-                            {children}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                {/* Chat Content - takes ~65% of viewport */}
+                <div className="flex-1 overflow-hidden" style={{ height: '65dvh', maxHeight: '65dvh' }}>
+                    {children}
+                </div>
+            </div>
         </>
     );
 }
