@@ -46,60 +46,62 @@ export function useGameSocket() {
         socket.emit('check_active_game');
 
         const handleStateUpdate = (newGameState: Record<string, unknown>) => {
-            const oldState = useAppStore.getState().gameState;
-            const newPhase = newGameState.phase as string | null;
-            const newPlayers = newGameState.players as Player[] | undefined;
-
-            if (oldState.phase && newPhase && oldState.phase !== newPhase) {
-                if (newPhase === 'NIGHT') playSound('night.mp3');
-                if (newPhase === 'DAY_DISCUSSION') playSound('day.mp3');
-                if (newPhase === 'DAY_VOTING') playSound('voting.mp3');
-                if (newPhase === 'END_GAME') playSound('win.mp3');
-
-                setOverlayPhase(newPhase);
-                setShowPhaseOverlay(true);
-                setTimeout(() => setShowPhaseOverlay(false), 3000);
-            }
-
-            // Check deaths
-            if (oldState.players?.length) {
-                oldState.players.forEach((oldP: Player) => {
-                    const newP = newPlayers?.find((p: Player) => p.userId === oldP.userId);
-                    if (oldP.isAlive && newP && !newP.isAlive) {
-                        playSound('death.mp3');
-                        audioManager.playShotSound();
-                    }
-                });
-            }
-
-            // Extract myRole from the current user's player entry
             const currentUserId = useAppStore.getState().user?.id;
-            const me = newPlayers?.find((p: Player) => p.userId === currentUserId);
-            const myRole = (me?.role as string) || oldState.myRole;
 
-            // Preserve chat and roomId that server doesn't send
-            useAppStore.getState().setGameState({
-                ...(newGameState as Partial<typeof oldState>),
-                myRole,
-                chat: oldState.chat,
-                roomId: oldState.roomId || (newGameState.roomId as string | null),
+            useAppStore.getState().setGameState((oldState) => {
+                const newPhase = newGameState.phase as string | null;
+                const newPlayers = newGameState.players as Player[] | undefined;
+
+                if (oldState.phase && newPhase && oldState.phase !== newPhase) {
+                    if (newPhase === 'NIGHT') playSound('night.mp3');
+                    if (newPhase === 'DAY_DISCUSSION') playSound('day.mp3');
+                    if (newPhase === 'DAY_VOTING') playSound('voting.mp3');
+                    if (newPhase === 'END_GAME') playSound('win.mp3');
+
+                    setOverlayPhase(newPhase);
+                    setShowPhaseOverlay(true);
+                    setTimeout(() => setShowPhaseOverlay(false), 3000);
+                }
+
+                // Check deaths
+                if (oldState.players?.length) {
+                    oldState.players.forEach((oldP: Player) => {
+                        const newP = newPlayers?.find((p: Player) => p.userId === oldP.userId);
+                        if (oldP.isAlive && newP && !newP.isAlive) {
+                            playSound('death.mp3');
+                            audioManager.playShotSound();
+                        }
+                    });
+                }
+
+                // Extract myRole from the current user's player entry
+                const me = newPlayers?.find((p: Player) => p.userId === currentUserId);
+                const myRole = (me?.role as string) || oldState.myRole;
+
+                // Preserve chat and roomId that server doesn't send
+                return {
+                    ...(newGameState as Partial<typeof oldState>),
+                    myRole,
+                    chat: oldState.chat,
+                    roomId: oldState.roomId || (newGameState.roomId as string | null),
+                };
             });
         };
 
         const handleSystemChat = (msg: string) => {
             const newMsg = { id: Date.now().toString(), sender: 'Система', text: msg, type: 'system' as const };
-            useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
+            useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
         };
 
         const handleChatMessage = (msgData: { sender: string, text: string, type: 'general' | 'mafia' | 'dead' | 'lobby', staffRoleTitle?: string, staffRoleColor?: string }) => {
             const newMsg = { id: Date.now().toString() + Math.random(), ...msgData };
-            useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
+            useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
         };
 
         const handleGameEnded = () => {
             // Reset game state and navigate back to lobby
             setTimeout(() => {
-                useAppStore.getState().setGameState({
+                useAppStore.getState().setGameState(() => ({
                     phase: null,
                     players: [],
                     myRole: null,
@@ -109,7 +111,7 @@ export function useGameSocket() {
                     bets: [],
                     roomId: null,
                     hostId: null,
-                });
+                }));
                 navigate('/lobby');
             }, 500);
         };

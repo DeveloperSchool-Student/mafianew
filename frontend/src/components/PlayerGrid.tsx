@@ -10,9 +10,10 @@ interface PlayerGridProps {
     /** Journalist selected targets for parent tracking */
     journalistSelectedTargets?: string[];
     onJournalistTargetsChange?: (targets: string[]) => void;
+    hasActedNight?: boolean;
 }
 
-export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets, onJournalistTargetsChange }: PlayerGridProps) {
+export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets, onJournalistTargetsChange, hasActedNight }: PlayerGridProps) {
     const { user, gameState, socket } = useAppStore();
     // Use parent-managed state for journalist targets if provided, otherwise local
     const [localJournalistTargets, setLocalJournalistTargets] = useState<string[]>([]);
@@ -57,13 +58,13 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                     {gameState.players?.map((p: Player, idx: number) => {
                         const voteCount = getVoteCount(p.userId);
                         const isSelectedByJournalist = selectedJournalistTargets.includes(p.userId);
-                        const isDisabledByVote = hasVoted && gameState.phase === 'DAY_VOTING';
+                        const isDisabled = (hasVoted && gameState.phase === 'DAY_VOTING') || (hasActedNight && gameState.phase === 'NIGHT');
                         return (
                             <div
                                 key={p.userId || idx}
                                 onClick={() => {
                                     if (!me?.isAlive) return;
-                                    if (isDisabledByVote) return;
+                                    if (isDisabled) return;
                                     if (gameState.phase === 'NIGHT' && me?.role === 'JOURNALIST') {
                                         if (selectedJournalistTargets.includes(p.userId)) {
                                             setSelectedJournalistTargets(selectedJournalistTargets.filter(id => id !== p.userId));
@@ -80,7 +81,7 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                                     }
                                 }}
                                 className={`p-3 sm:p-4 rounded flex flex-col sm:flex-row justify-between sm:items-center border transform gap-2 sm:gap-0 ${p.isAlive
-                                        ? `bg-[#1a1a1a] border-gray-700 ${isDisabledByVote
+                                        ? `bg-[#1a1a1a] border-gray-700 ${isDisabled
                                             ? 'opacity-60 cursor-not-allowed'
                                             : 'hover:scale-[1.01] hover:border-mafia-red/50 cursor-pointer active:scale-[0.98] active:bg-[#252525]'
                                         } transition-all duration-200 shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`

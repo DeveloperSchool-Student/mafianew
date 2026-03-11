@@ -59,7 +59,7 @@ interface AppState {
 
     setUser: (user: User | null) => void;
     setSocket: (socket: Socket | null) => void;
-    setGameState: (state: Partial<GameState>) => void;
+    setGameState: (stateUpdate: Partial<GameState> | ((state: GameState) => Partial<GameState>)) => void;
     updateSoundSettings: (settings: Partial<{ master: number; music: number; sfx: number }>) => void;
     setTheme: (theme: 'dark' | 'light') => void;
     logout: () => void;
@@ -103,7 +103,10 @@ export const useAppStore = create<AppState>((set) => ({
     setSocket: (socket) => set({ socket }),
 
     setGameState: (stateUpdate) => set((state) => ({
-        gameState: { ...state.gameState, ...stateUpdate }
+        gameState: { 
+            ...state.gameState, 
+            ...(typeof stateUpdate === 'function' ? stateUpdate(state.gameState) : stateUpdate) 
+        }
     })),
 
     updateSoundSettings: (updates) => set((state) => {

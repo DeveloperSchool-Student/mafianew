@@ -96,11 +96,17 @@ export function Game() {
             if (alreadyVoted) {
                 // Notify user they already voted
                 const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Ви вже проголосували! Змінити голос неможливо.', type: 'system' as const };
-                useAppStore.getState().setGameState({ chat: [...useAppStore.getState().gameState.chat, newMsg] });
+                useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
                 return;
             }
             socket.emit('vote', { roomId: gameState.roomId, targetId });
         } else if (gameState.phase === 'NIGHT') {
+            if (hasActedNight) {
+                const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Нічну дію вже обрано. Чекайте на світанок.', type: 'system' as const };
+                useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
+                return;
+            }
+
             // Determine action type from role using the map
             let actionType: string = '';
             const myRole = gameState.myRole as GameRole | null;
@@ -261,6 +267,7 @@ export function Game() {
                             roleLabel={roleLabel}
                             journalistSelectedTargets={journalistTargets}
                             onJournalistTargetsChange={setJournalistTargets}
+                            hasActedNight={hasActedNight}
                         />
                     </div>
 
@@ -349,7 +356,13 @@ export function Game() {
                                 <BettingPanel />
                             </div>
                             {/* Player Grid */}
-                            <PlayerGrid handleAction={handleAction} roleLabel={roleLabel} />
+                            <PlayerGrid 
+                                handleAction={handleAction} 
+                                roleLabel={roleLabel} 
+                                journalistSelectedTargets={journalistTargets}
+                                onJournalistTargetsChange={setJournalistTargets}
+                                hasActedNight={hasActedNight} 
+                            />
                         </div>
 
                         {/* Chat Panel */}
