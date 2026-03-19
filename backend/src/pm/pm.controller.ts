@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PmService } from './pm.service';
+import { SendMessageDto } from './dto/pm.dto';
 
 @Controller('pm')
 @UseGuards(AuthGuard('jwt'))
@@ -31,7 +32,7 @@ export class PmController {
   @Post('send')
   sendMessage(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetId: string; content: string },
+    @Body() body: SendMessageDto,
   ) {
     return this.pmService.sendMessage(req.user.id, body.targetId, body.content);
   }

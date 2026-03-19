@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { TradeService } from './trade.service';
+import { CreateTradeDto } from './dto/trade.dto';
 
 @Controller('trade')
 @UseGuards(AuthGuard('jwt'))
@@ -16,17 +17,7 @@ export class TradeController {
   constructor(private readonly tradeService: TradeService) {}
 
   @Post('create')
-  createTrade(
-    @Request() req: any,
-    @Body()
-    body: {
-      receiverId: string;
-      offerAmount: number;
-      offerCurrency: 'SOFT' | 'HARD';
-      requestAmount: number;
-      requestCurrency: 'SOFT' | 'HARD';
-    },
-  ) {
+  createTrade(@Request() req: any, @Body() body: CreateTradeDto) {
     return this.tradeService.createTrade(req.user.id, body);
   }
 

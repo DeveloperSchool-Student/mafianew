@@ -1,30 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { Trophy, Calendar } from 'lucide-react';
+import { fetchMyProfile } from '../services/profileApi';
+import type { MatchHistoryEntry } from '../types/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface MatchHistory {
-    id: string;
-    role: string;
-    won: boolean;
-    match: {
-        id: string;
-        winner: string;
-        duration: number;
-        createdAt: string;
-    };
-}
+type FilterOutcome = 'ALL' | 'WIN' | 'LOSS';
 
 export function History() {
     const { user } = useAppStore();
     const navigate = useNavigate();
-    const [history, setHistory] = useState<MatchHistory[]>([]);
+    const [history, setHistory] = useState<MatchHistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [filterOutcome, setFilterOutcome] = useState<'ALL' | 'WIN' | 'LOSS'>('ALL');
+    const [filterOutcome, setFilterOutcome] = useState<FilterOutcome>('ALL');
     const [filterRole, setFilterRole] = useState('ALL');
 
     useEffect(() => {
@@ -32,11 +21,9 @@ export function History() {
             navigate('/login');
             return;
         }
-        axios.get(`${API_URL}/users/me`, {
-            headers: { Authorization: `Bearer ${user.token}` }
-        })
-            .then(res => {
-                setHistory(res.data?.profile?.matchHistory || []);
+        fetchMyProfile(user.token)
+            .then(data => {
+                setHistory(data.profile?.matchHistory || []);
                 setLoading(false);
             })
             .catch(() => setLoading(false));
@@ -64,7 +51,7 @@ export function History() {
                         <label className="block text-xs text-gray-400 mb-1">Результат</label>
                         <select
                             value={filterOutcome}
-                            onChange={e => setFilterOutcome(e.target.value as any)}
+                            onChange={e => setFilterOutcome(e.target.value as FilterOutcome)}
                             className="bg-black border border-gray-700 p-2 rounded text-sm text-white focus:outline-none"
                         >
                             <option value="ALL">Всі матчі</option>

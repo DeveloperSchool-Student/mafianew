@@ -117,6 +117,34 @@ export interface TournamentParticipant {
     placement: number | null;
 }
 
+// ─── Trade ───
+
+export interface Trade {
+    id: string;
+    senderId: string;
+    receiverId: string;
+    senderItems: string[];
+    receiverItems: string[];
+    senderSoft: number;
+    receiverSoft: number;
+    status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+    createdAt: string;
+    sender?: { username: string };
+    receiver?: { username: string };
+}
+
+// ─── Direct Messages ───
+
+export interface PMMessage {
+    id: string;
+    senderId: string;
+    receiverId: string;
+    content: string;
+    createdAt: string;
+    read: boolean;
+    sender?: { username: string };
+}
+
 // ─── Admin ───
 
 export interface Report {
@@ -196,28 +224,6 @@ export interface RoomSettings {
     [key: string]: boolean | number; // for dynamic access by settings key
 }
 
-// ─── Staff role constant (shared between admin and tournaments) ───
-
-export interface StaffRoleDefinition {
-    key: string;
-    title: string;
-    power: number;
-    color: string;
-}
-
-export const STAFF_ROLES: StaffRoleDefinition[] = [
-    { key: 'OWNER', title: 'Власник', power: 9, color: '#ff0000' },
-    { key: 'CURATOR', title: 'Куратор Адміністраторів', power: 8, color: '#ff4400' },
-    { key: 'SENIOR_ADMIN', title: 'Старший Адміністратор', power: 7, color: '#ff6600' },
-    { key: 'ADMIN', title: 'Адміністратор', power: 6, color: '#ff8800' },
-    { key: 'JUNIOR_ADMIN', title: 'Молодший Адміністратор', power: 5, color: '#ffaa00' },
-    { key: 'SENIOR_MOD', title: 'Старший Модератор', power: 4, color: '#00ccff' },
-    { key: 'MOD', title: 'Модератор', power: 3, color: '#00aaff' },
-    { key: 'HELPER', title: 'Хелпер', power: 2, color: '#44ddaa' },
-    { key: 'TRAINEE', title: 'Стажер', power: 1, color: '#88cc88' },
-];
-
-export function getStaffPower(staffRoleKey?: string | null): number {
-    if (!staffRoleKey) return 0;
-    return STAFF_ROLES.find(r => r.key === staffRoleKey)?.power ?? 0;
-}
+// ─── Staff role constant (re-exported from shared constants) ───
+export type { StaffRoleDef as StaffRoleDefinition } from '../constants/staffRoles';
+export { STAFF_ROLES, getStaffPower } from '../constants/staffRoles';

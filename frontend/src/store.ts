@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Socket } from 'socket.io-client';
-import type { Player, Vote, Bet, ChatMessage } from './types/game';
+import type { Player, Vote, Bet, ChatMessage, GamePhase, GameRole } from './types/game';
+import type { ProfileData, RoomSettings } from './types/api';
 
 export interface User {
     id: string;
@@ -10,7 +11,7 @@ export interface User {
     staffRoleKey?: string | null;
     staffColor?: string | null;
     staffTitle?: string | null;
-    profile?: any;
+    profile?: ProfileData;
     wallet?: { soft: number, hard: number };
 }
 
@@ -21,32 +22,16 @@ export interface GameState {
     roomId: string | null;
     hostId: string | null;
     type?: 'CASUAL' | 'RANKED' | 'TOURNAMENT';
-    phase: string | null;
+    phase: GamePhase | string | null;
     players: Player[];
-    myRole: string | null;
+    myRole: GameRole | string | null;
     timerMs: number;
     chat: ChatMessage[];
     votes: Vote[];
     bets: Bet[];
     mayorVetoUsed?: boolean;
     pendingExecutionId?: string | null;
-    settings?: {
-        dayTimerMs: number;
-        nightTimerMs: number;
-        enableSerialKiller: boolean;
-        enableEscort: boolean;
-        enableJester: boolean;
-        enableLawyer?: boolean;
-        enableBodyguard?: boolean;
-        enableTracker?: boolean;
-        enableInformer?: boolean;
-        enableMayor?: boolean;
-        enableJudge?: boolean;
-        enableBomber?: boolean;
-        enableTrapper?: boolean;
-        enableSilencer?: boolean;
-        enableLovers?: boolean;
-    };
+    settings?: Partial<RoomSettings>;
 }
 
 interface AppState {

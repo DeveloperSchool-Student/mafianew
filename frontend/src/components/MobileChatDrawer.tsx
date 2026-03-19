@@ -11,6 +11,7 @@ interface MobileChatDrawerProps {
 
 export function MobileChatDrawer({ isOpen, onToggle, unreadCount, children }: MobileChatDrawerProps) {
     const [dragY, setDragY] = useState(0);
+    const [drawerHeight, setDrawerHeight] = useState('65dvh');
     const drawerRef = useRef<HTMLDivElement>(null);
 
     // Lock body scroll when drawer is open
@@ -24,6 +25,21 @@ export function MobileChatDrawer({ isOpen, onToggle, unreadCount, children }: Mo
             document.body.style.overflow = '';
         };
     }, [isOpen]);
+
+    // Adjust drawer height when virtual keyboard opens/closes
+    useEffect(() => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const onResize = () => {
+            // When keyboard opens, viewport height shrinks
+            const viewportH = vv.height;
+            const maxH = Math.min(viewportH * 0.85, viewportH - 60);
+            setDrawerHeight(`${maxH}px`);
+        };
+        vv.addEventListener('resize', onResize);
+        onResize();
+        return () => vv.removeEventListener('resize', onResize);
+    }, []);
 
     return (
         <>
@@ -128,8 +144,8 @@ export function MobileChatDrawer({ isOpen, onToggle, unreadCount, children }: Mo
                     </button>
                 </div>
 
-                {/* Chat Content - takes ~65% of viewport */}
-                <div className="flex-1 overflow-hidden" style={{ height: '65dvh', maxHeight: '65dvh' }}>
+                {/* Chat Content — adapts to viewport (keyboard-aware) */}
+                <div className="flex-1 overflow-hidden" style={{ height: drawerHeight, maxHeight: drawerHeight }}>
                     {children}
                 </div>
             </div>

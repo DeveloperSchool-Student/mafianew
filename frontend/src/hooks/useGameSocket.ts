@@ -16,7 +16,7 @@ export function useGameSocket() {
         if (soundSettings.master === 0 || soundSettings.sfx === 0) return;
         const audio = new Audio(`/sounds/${soundFile}`);
         audio.volume = soundSettings.master * soundSettings.sfx;
-        audio.play().catch(() => { });
+        audio.play().catch((e) => { console.warn('Audio play prevented in socket hook:', e); });
     };
 
     // Ambient background sounds using the AudioManager

@@ -11,6 +11,17 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
+import {
+  ChangeAvatarDto,
+  BuyFrameDto,
+  EquipFrameDto,
+  CreateClanDto,
+  JoinClanDto,
+  KickFromClanDto,
+  PromoteInClanDto,
+  DeclareClanWarDto,
+  ClaimQuestDto,
+} from './dto/users.dto';
 
 @Controller('users')
 export class UsersController {
@@ -135,16 +146,14 @@ export class UsersController {
   @Post('avatar')
   async changeAvatar(
     @Request() req: { user: { id: string } },
-    @Body() body: { avatarUrl: string },
+    @Body() body: ChangeAvatarDto,
   ) {
     const url = (body.avatarUrl || '').trim();
 
-    // Validation
     if (!url) throw new BadRequestException('URL не може бути порожнім.');
     if (url.length > 500)
       throw new BadRequestException('URL занадто довгий (макс. 500 символів).');
 
-    // Must be valid HTTP(S) URL
     try {
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -156,7 +165,6 @@ export class UsersController {
       );
     }
 
-    // Block SVG (XSS risk) and non-image extensions
     const lower = url.toLowerCase();
     if (lower.endsWith('.svg') || lower.includes('.svg?')) {
       throw new BadRequestException(
@@ -179,7 +187,6 @@ export class UsersController {
         lower.includes(ext + '#') ||
         lower.endsWith(ext),
     );
-    // Allow URLs without extension (e.g. Discord CDN, Imgur short links)
     const hasAnyExtension = /\.\w{2,5}(\?|#|$)/.test(
       lower.split('/').pop() || '',
     );
@@ -196,7 +203,7 @@ export class UsersController {
   @Post('store/buy')
   async buyFrame(
     @Request() req: { user: { id: string } },
-    @Body() body: { frameId: string },
+    @Body() body: BuyFrameDto,
   ) {
     try {
       return await this.usersService.buyFrame(req.user.id, body.frameId);
@@ -209,7 +216,7 @@ export class UsersController {
   @Post('store/equip')
   async equipFrame(
     @Request() req: { user: { id: string } },
-    @Body() body: { frameId: string },
+    @Body() body: EquipFrameDto,
   ) {
     try {
       return await this.usersService.equipFrame(req.user.id, body.frameId);
@@ -228,7 +235,7 @@ export class UsersController {
   @Post('clans')
   async createClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { name: string },
+    @Body() body: CreateClanDto,
   ) {
     try {
       return await this.usersService.createClan(req.user.id, body.name);
@@ -241,7 +248,7 @@ export class UsersController {
   @Post('clans/join')
   async joinClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { clanName: string },
+    @Body() body: JoinClanDto,
   ) {
     try {
       return await this.usersService.joinClan(req.user.id, body.clanName);
@@ -264,7 +271,7 @@ export class UsersController {
   @Post('clans/kick')
   async kickFromClan(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetUserId: string },
+    @Body() body: KickFromClanDto,
   ) {
     try {
       return await this.usersService.kickFromClan(
@@ -280,8 +287,7 @@ export class UsersController {
   @Post('clans/promote')
   async promoteInClan(
     @Request() req: { user: { id: string } },
-    @Body()
-    body: { targetUserId: string; newRole: 'MEMBER' | 'OFFICER' | 'OWNER' },
+    @Body() body: PromoteInClanDto,
   ) {
     try {
       return await this.usersService.promoteInClan(
@@ -298,7 +304,7 @@ export class UsersController {
   @Post('clans/war/declare')
   async declareClanWar(
     @Request() req: { user: { id: string } },
-    @Body() body: { targetClanId: string; customBet: number },
+    @Body() body: DeclareClanWarDto,
   ) {
     try {
       return await this.usersService.declareClanWar(
@@ -361,7 +367,7 @@ export class UsersController {
   @Post('quests/claim')
   async claimQuestReward(
     @Request() req: { user: { id: string } },
-    @Body() body: { questId: string },
+    @Body() body: ClaimQuestDto,
   ) {
     try {
       return await this.usersService.claimQuestReward(

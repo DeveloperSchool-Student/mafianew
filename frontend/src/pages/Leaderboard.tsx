@@ -2,21 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, ArrowLeft } from 'lucide-react';
 import { useAppStore } from '../store';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface LeaderboardEntry {
-    mmr: number;
-    user: {
-        username: string;
-    };
-}
+import { fetchLeaderboard, fetchClanLeaderboard } from '../services/usersApi';
+import type { LeaderboardEntry, ClanLeaderboardEntry } from '../services/usersApi';
 
 export function Leaderboard() {
     const { user } = useAppStore();
     const navigate = useNavigate();
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-    const [clanLeaderboard, setClanLeaderboard] = useState<any[]>([]);
+    const [clanLeaderboard, setClanLeaderboard] = useState<ClanLeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [tab, setTab] = useState<'players' | 'clans'>('players');
@@ -27,25 +20,22 @@ export function Leaderboard() {
             return;
         }
 
-        const fetchLeaderboard = async () => {
+        const load = async () => {
             try {
-                const [playersRes, clansRes] = await Promise.all([
-                    fetch(`${API_URL}/users/leaderboard`, { headers: { Authorization: `Bearer ${user.token}` } }),
-                    fetch(`${API_URL}/users/clans`, { headers: { Authorization: `Bearer ${user.token}` } })
+                const [players, clans] = await Promise.all([
+                    fetchLeaderboard(user.token),
+                    fetchClanLeaderboard(user.token),
                 ]);
-
-                if (!playersRes.ok || !clansRes.ok) throw new Error('Failed to fetch leaderboard');
-
-                setLeaderboard(await playersRes.json());
-                setClanLeaderboard(await clansRes.json());
-            } catch (err: any) {
-                setError(err.message);
+                setLeaderboard(players);
+                setClanLeaderboard(clans);
+            } catch (err: unknown) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch leaderboard');
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchLeaderboard();
+        load();
     }, [user, navigate]);
 
     return (

@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Lock, ArrowLeft } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { resetPassword } from '../services/usersApi';
 
 export function ResetPassword() {
     const [password, setPassword] = useState('');
@@ -38,11 +36,12 @@ export function ResetPassword() {
         setStatus(null);
 
         try {
-            const res = await axios.post(`${API_URL}/auth/reset-password`, { token, newPassword: password });
-            setStatus({ type: 'success', msg: res.data.message });
+            const data = await resetPassword(token!, password);
+            setStatus({ type: 'success', msg: data.message });
             setTimeout(() => navigate('/login'), 3000);
-        } catch (err: any) {
-            setStatus({ type: 'error', msg: err.response?.data?.message || 'Помилка скидання паролю' });
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setStatus({ type: 'error', msg: axiosErr.response?.data?.message || 'Помилка скидання паролю' });
         } finally {
             setLoading(false);
         }

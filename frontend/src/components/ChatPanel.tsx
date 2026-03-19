@@ -169,8 +169,14 @@ export function ChatPanel({
                         placeholder={
                             isGameOver ? 'Гра закінчена' :
                                 activeTab === 'dead_chat' ? 'Написати мертвим/глядачам...' :
-                                    gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат (Tap here)'
+                                    gameState.phase === 'NIGHT' && gameState.myRole !== 'MAFIA' && gameState.myRole !== 'DON' ? 'Ви спите...' : 'Написати в чат...'
                         }
+                        enterKeyHint="send"
+                        autoComplete="off"
+                        onFocus={(e) => {
+                            // Scroll input into view on mobile when keyboard opens
+                            setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300);
+                        }}
                         className="w-full bg-[#1a1a1a] border border-gray-700 rounded-lg p-3 sm:p-2 text-white focus:outline-none focus:border-gray-500 text-base sm:text-sm disabled:opacity-50"
                         disabled={
                             isGameOver ||

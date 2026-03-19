@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useAppStore } from '../store';
 import { Gift, X, CheckCircle, Calendar } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { fetchRewardStatus, claimDailyReward } from '../services/usersApi';
+import type { RewardStatus } from '../services/usersApi';
 
 interface DailyRewardModalProps {
     isOpen: boolean;
@@ -14,7 +13,7 @@ export function DailyRewardModal({ isOpen, onClose }: DailyRewardModalProps) {
     const { user } = useAppStore();
     const [loading, setLoading] = useState(true);
     const [claiming, setClaiming] = useState(false);
-    const [status, setStatus] = useState<any>(null);
+    const [status, setStatus] = useState<RewardStatus | null>(null);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
@@ -25,31 +24,31 @@ export function DailyRewardModal({ isOpen, onClose }: DailyRewardModalProps) {
     }, [isOpen, user]);
 
     const checkStatus = async () => {
+        if (!user) return;
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get(`${API_URL}/reward/status`, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setStatus(res.data);
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to fetch reward status');
+            const data = await fetchRewardStatus(user.token);
+            setStatus(data);
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Failed to fetch reward status');
         } finally {
             setLoading(false);
         }
     };
 
     const handleClaim = async () => {
+        if (!user) return;
         setClaiming(true);
         setError('');
         try {
-            const res = await axios.post(`${API_URL}/reward/claim`, {}, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setSuccessMessage(`Успішно отримано: +${res.data.softReward} 🪙 ${res.data.hardReward > 0 ? `+${res.data.hardReward} 💎` : ''}`);
+            const data = await claimDailyReward(user.token);
+            setSuccessMessage(`Успішно отримано: +${data.softReward} 🪙 ${data.hardReward > 0 ? `+${data.hardReward} 💎` : ''}`);
             await checkStatus();
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Помилка отримання нагороди');
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Помилка отримання нагороди');
         } finally {
             setClaiming(false);
         }

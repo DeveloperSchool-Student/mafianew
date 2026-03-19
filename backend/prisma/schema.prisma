@@ -57,6 +57,11 @@ model User {
   receivedTrades    Trade[]  @relation("ReceivedTrades")
   /// Seasons
   seasonRewards     SeasonReward[]
+
+  @@index([staffRoleKey])
+  @@index([createdAt])
+  @@index([role])
+  @@index([fingerprint])
 }
 
 /// Ієрархія посад адміністрації (рівень 1–9)
@@ -78,6 +83,11 @@ model AdminActionLog {
   target    User?    @relation("LogTarget", fields: [targetId], references: [id])
   details   String?
   createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([createdAt])
+  @@index([action])
 }
 
 /// Скарги гравців
@@ -94,6 +104,11 @@ model Report {
   resolvedNote  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([reporterId])
+  @@index([targetId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Profile {
@@ -130,6 +145,12 @@ model Profile {
   achievements Achievement[]
   matchHistory MatchParticipant[]
   userQuests  UserQuest[]
+
+  @@index([clanId])
+  @@index([mmr])
+  @@index([level])
+  @@index([bannedUntil])
+  @@index([mutedUntil])
 }
 
 /// Лог усіх покарань (ban/mute/kick) із тривалістю та областю дії
@@ -143,6 +164,10 @@ model Punishment {
   createdAt DateTime @default(now())
   expiresAt DateTime?
   createdBy String?  // id адміністратора / OWNER
+
+  @@index([userId])
+  @@index([type])
+  @@index([expiresAt])
 }
 
 model Clan {
@@ -157,6 +182,9 @@ model Clan {
   // Clan Wars
   warsAsChallenger  ClanWar[] @relation("ChallengerClan")
   warsAsTarget      ClanWar[] @relation("TargetClan")
+
+  @@index([ownerId])
+  @@index([rating])
 }
 
 model Achievement {
@@ -165,6 +193,8 @@ model Achievement {
   profile   Profile   @relation(fields: [profileId], references: [id])
   type      String
   unlockedAt DateTime @default(now())
+
+  @@index([profileId])
 }
 
 model Match {
@@ -174,6 +204,8 @@ model Match {
   duration  Int
   logs      Json?     @default("[]")
   participants MatchParticipant[]
+
+  @@index([createdAt])
 }
 
 model MatchParticipant {
@@ -184,6 +216,10 @@ model MatchParticipant {
   profile   Profile   @relation(fields: [profileId], references: [id])
   role      String
   won       Boolean
+
+  @@index([matchId])
+  @@index([profileId])
+  @@index([role])
 }
 
 model Wallet {
@@ -203,6 +239,11 @@ model Friendship {
   friend    User     @relation("FriendFriendships", fields: [friendId], references: [id])
   status    String   @default("pending") // pending | accepted | blocked
   createdAt DateTime @default(now())
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+  @@index([status])
 }
 
 /// Приватні повідомлення між користувачами
@@ -215,6 +256,10 @@ model PrivateMessage {
   content   String
   createdAt DateTime @default(now())
   readAt    DateTime?
+
+  @@index([fromId])
+  @@index([toId])
+  @@index([createdAt])
 }
 
 /// Колекційні предмети (скіни, рамки, аватари тощо)
@@ -226,6 +271,9 @@ model CollectionItem {
   roleKey   String?  // Для якої ролі/персонажа цей предмет (якщо потрібно)
   createdAt DateTime @default(now())
   owners    UserCollection[]
+
+  @@index([type])
+  @@index([rarity])
 }
 
 /// Звʼязок користувача з колекційними предметами
@@ -236,6 +284,10 @@ model UserCollection {
   itemId    String
   item      CollectionItem @relation(fields: [itemId], references: [id])
   acquiredAt DateTime      @default(now())
+
+  @@unique([userId, itemId])
+  @@index([userId])
+  @@index([itemId])
 }
 
 /// Шаблони завдань (квестів)
@@ -262,6 +314,11 @@ model UserQuest {
   completed   Boolean   @default(false)
   completedAt DateTime?
   createdAt   DateTime  @default(now())
+
+  @@unique([profileId, questId])
+  @@index([profileId])
+  @@index([questId])
+  @@index([completed])
 }
 
 model Appeal {
@@ -274,6 +331,10 @@ model Appeal {
   resolvedBy  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 /// Система обміну (Трейди)
@@ -295,6 +356,10 @@ model Trade {
   status          String   @default("PENDING") // PENDING | ACCEPTED | REJECTED | CANCELLED
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
 }
 
 /// Кланові Війни
@@ -315,6 +380,10 @@ model ClanWar {
   createdAt       DateTime @default(now())
   endedAt         DateTime?
   contributions   ClanWarContribution[]
+
+  @@index([challengerId])
+  @@index([targetId])
+  @@index([status])
 }
 
 /// Внесок гравця у кланову війну
@@ -327,6 +396,10 @@ model ClanWarContribution {
   points    Int      @default(0)
   source    String   // GAME_WIN | DIRECT_CLASH | CLAN_CLASH
   createdAt DateTime @default(now())
+
+  @@index([warId])
+  @@index([userId])
+  @@index([clanId])
 }
 
 /// Турнір
@@ -343,6 +416,10 @@ model Tournament {
   endedAt         DateTime?
   createdAt       DateTime @default(now())
   participants    TournamentParticipant[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
 }
 
 /// Учасник турніру
@@ -357,6 +434,11 @@ model TournamentParticipant {
   wins          Int        @default(0)
   losses        Int        @default(0)
   joinedAt      DateTime   @default(now())
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId])
+  @@index([userId])
+  @@index([status])
 }
 
 /// Сезони
@@ -367,6 +449,8 @@ model Season {
   endDate   DateTime?
   isActive  Boolean  @default(true)
   rewards   SeasonReward[]
+
+  @@index([isActive])
 }
 
 /// Нагороди гравців за сезон
@@ -379,4 +463,9 @@ model SeasonReward {
   rank      Int
   reward    String   // Description or JSON of reward
   createdAt DateTime @default(now())
+
+  @@unique([seasonId, userId])
+  @@index([seasonId])
+  @@index([userId])
+  @@index([rank])
 }

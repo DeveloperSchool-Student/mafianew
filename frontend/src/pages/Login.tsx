@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useAppStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { getFingerprint } from '../utils/fingerprint';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { login, register, authenticate2FA } from '../services/usersApi';
 
 export function Login() {
     const [isLogin, setIsLogin] = useState(true);
@@ -14,6 +12,7 @@ export function Login() {
     const [password, setPassword] = useState('');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
     const [requires2FA, setRequires2FA] = useState(false);
     const [tempUserId, setTempUserId] = useState('');
     const [twoFactorToken, setTwoFactorToken] = useState('');
@@ -31,46 +30,54 @@ export function Login() {
             return;
         }
 
-        const endpoint = isLogin ? '/auth/login' : '/auth/register';
-
+        setLoading(true);
         try {
             const fingerprint = await getFingerprint().catch(() => undefined);
-            const res = await axios.post(`${API_URL}${endpoint}`, { username, password, fingerprint });
+            const res = isLogin
+                ? await login(username, password, fingerprint)
+                : await register(username, password, fingerprint);
 
-            if (res.data.requires2FA) {
+            if (res.requires2FA) {
                 setRequires2FA(true);
-                setTempUserId(res.data.userId);
+                setTempUserId(res.userId);
                 return;
             }
 
             setUser({
-                id: res.data.user.id,
-                username: res.data.user.username,
-                token: res.data.access_token,
-                role: res.data.user.role,
-                staffRoleKey: res.data.user.staffRoleKey ?? null,
+                id: res.user.id,
+                username: res.user.username,
+                token: res.access_token,
+                role: res.user.role,
+                staffRoleKey: res.user.staffRoleKey ?? null,
             });
             navigate('/lobby');
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Authentication failed');
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Authentication failed');
+        } finally {
+            setLoading(false);
         }
     };
 
     const handle2FASubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/2fa/authenticate`, { userId: tempUserId, token: twoFactorToken });
+            const res = await authenticate2FA(tempUserId, twoFactorToken);
             setUser({
-                id: res.data.user.id,
-                username: res.data.user.username,
-                token: res.data.access_token,
-                role: res.data.user.role,
-                staffRoleKey: res.data.user.staffRoleKey ?? null,
+                id: res.user.id,
+                username: res.user.username,
+                token: res.access_token,
+                role: res.user.role,
+                staffRoleKey: res.user.staffRoleKey ?? null,
             });
             navigate('/lobby');
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Хибний код 2FA');
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Хибний код 2FA');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -151,8 +158,8 @@ export function Login() {
                     </>
                 )}
 
-                <button type="submit" className="w-full bg-mafia-red hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition-all duration-300 transform hover:scale-[1.02] shadow-[0_0_15px_rgba(204,0,0,0.5)]">
-                    {requires2FA ? 'Увійти' : (isLogin ? t('login.submit') : t('login.register'))}
+                <button type="submit" disabled={loading} className="w-full bg-mafia-red hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded transition-all duration-300 transform hover:scale-[1.02] shadow-[0_0_15px_rgba(204,0,0,0.5)]">
+                    {loading ? 'Завантаження...' : requires2FA ? 'Увійти' : (isLogin ? t('login.submit') : t('login.register'))}
                 </button>
 
                 {!requires2FA && (

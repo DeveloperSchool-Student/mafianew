@@ -10,6 +10,24 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminService } from './admin.service';
+import {
+  SetStaffRoleDto,
+  TargetUsernameDto,
+  PunishDto,
+  UnpunishDto,
+  AdjustEconomyDto,
+  ChangeNicknameDto,
+  CreateReportDto,
+  ResolveReportDto,
+  SubmitAppealDto,
+  ResolveAppealDto,
+  ClearLogsDto,
+  DeleteUserDto,
+  SetTitleDto,
+  ResolveClanWarDto,
+  LaunchEventDto,
+  StartSeasonDto,
+} from './dto/admin.dto';
 
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'))
@@ -24,18 +42,12 @@ export class AdminController {
   }
 
   @Post('staff/set-role')
-  setStaffRole(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; roleKey: string },
-  ) {
+  setStaffRole(@Request() req: any, @Body() body: SetStaffRoleDto) {
     return this.adminService.setStaffRole(req.user, body);
   }
 
   @Post('staff/remove-role')
-  removeStaffRole(
-    @Request() req: any,
-    @Body() body: { targetUsername: string },
-  ) {
+  removeStaffRole(@Request() req: any, @Body() body: TargetUsernameDto) {
     return this.adminService.removeStaffRole(req.user, body);
   }
 
@@ -71,64 +83,38 @@ export class AdminController {
   /* ── Punishments ── */
 
   @Post('punish')
-  punish(
-    @Request() req: any,
-    @Body()
-    body: {
-      targetUsername: string;
-      type: 'BAN' | 'MUTE' | 'KICK' | 'WARN';
-      durationSeconds?: number;
-      scope?: string;
-      reason?: string;
-    },
-  ) {
+  punish(@Request() req: any, @Body() body: PunishDto) {
     return this.adminService.punishUser(req.user, body);
   }
 
   @Post('unpunish')
-  unpunish(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; type: 'BAN' | 'MUTE' | 'KICK' },
-  ) {
+  unpunish(@Request() req: any, @Body() body: UnpunishDto) {
     return this.adminService.unpunishUser(req.user, body);
   }
 
   /* ── Gold / EXP ── */
 
   @Post('adjust-gold')
-  adjustGold(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; delta: number },
-  ) {
+  adjustGold(@Request() req: any, @Body() body: AdjustEconomyDto) {
     return this.adminService.adjustGold(req.user, body);
   }
 
   @Post('adjust-exp')
-  adjustExp(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; delta: number },
-  ) {
+  adjustExp(@Request() req: any, @Body() body: AdjustEconomyDto) {
     return this.adminService.adjustExp(req.user, body);
   }
 
   /* ── Nickname ── */
 
   @Post('change-nickname')
-  changeNickname(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; newUsername: string },
-  ) {
+  changeNickname(@Request() req: any, @Body() body: ChangeNicknameDto) {
     return this.adminService.changeNickname(req.user, body);
   }
 
   /* ── Reports ── */
 
   @Post('reports')
-  createReport(
-    @Request() req: any,
-    @Body()
-    body: { targetUsername: string; reason: string; screenshotUrl?: string },
-  ) {
+  createReport(@Request() req: any, @Body() body: CreateReportDto) {
     return this.adminService.createReport(req.user.sub, body);
   }
 
@@ -146,7 +132,7 @@ export class AdminController {
   resolveReport(
     @Request() req: any,
     @Param('id') reportId: string,
-    @Body() body: { status: 'RESOLVED' | 'REJECTED'; note?: string },
+    @Body() body: ResolveReportDto,
   ) {
     return this.adminService.resolveReport(req.user, {
       reportId,
@@ -157,10 +143,7 @@ export class AdminController {
   /* ── Appeals ── */
 
   @Post('appeals/submit')
-  submitAppeal(
-    @Request() req: any,
-    @Body() body: { type: 'UNBAN' | 'UNMUTE'; reason: string },
-  ) {
+  submitAppeal(@Request() req: any, @Body() body: SubmitAppealDto) {
     return this.adminService.submitAppeal(req.user.sub, body);
   }
 
@@ -173,7 +156,7 @@ export class AdminController {
   resolveAppeal(
     @Request() req: any,
     @Param('id') appealId: string,
-    @Body() body: { status: 'APPROVED' | 'REJECTED' },
+    @Body() body: ResolveAppealDto,
   ) {
     return this.adminService.resolveAppeal(req.user, {
       appealId,
@@ -194,7 +177,7 @@ export class AdminController {
   }
 
   @Post('logs/clear')
-  clearLogs(@Request() req: any, @Body() body: { olderThanDays?: number }) {
+  clearLogs(@Request() req: any, @Body() body: ClearLogsDto) {
     return this.adminService.clearLogs(req.user, body);
   }
 
@@ -202,25 +185,20 @@ export class AdminController {
 
   @Post('seed-roles')
   seedRoles(@Request() req: any) {
-    // Only owner-level power can seed
     return this.adminService.seedStaffRoles();
   }
 
   /* ── Delete User ── */
 
   @Post('delete-user')
-  deleteUser(@Request() req: any, @Body() body: { targetUsername: string }) {
+  deleteUser(@Request() req: any, @Body() body: DeleteUserDto) {
     return this.adminService.deleteUser(req.user, body);
   }
 
   /* ── Titles (Leaders) ── */
 
   @Post('set-title')
-  setPlayerTitle(
-    @Request() req: any,
-    @Body() body: { targetUsername: string; title: string | null },
-  ) {
-    // Controller just passes to service, service handles auth/logic
+  setPlayerTitle(@Request() req: any, @Body() body: SetTitleDto) {
     return this.adminService.setPlayerTitle(req.user, body);
   }
 
@@ -235,7 +213,7 @@ export class AdminController {
   resolveClanWar(
     @Request() req: any,
     @Param('id') warId: string,
-    @Body() body: { winnerId: string | null },
+    @Body() body: ResolveClanWarDto,
   ) {
     return this.adminService.resolveClanWar(req.user, {
       warId,
@@ -246,11 +224,7 @@ export class AdminController {
   /* ── Events ── */
 
   @Post('events/launch')
-  launchEvent(
-    @Request() req: any,
-    @Body()
-    body: { eventName: string; rewardCoins?: number; eventRoles?: string[] },
-  ) {
+  launchEvent(@Request() req: any, @Body() body: LaunchEventDto) {
     return this.adminService.launchEvent(req.user, body);
   }
 
@@ -269,7 +243,7 @@ export class AdminController {
   }
 
   @Post('seasons/start')
-  startSeason(@Request() req: any, @Body() body: { name: string }) {
+  startSeason(@Request() req: any, @Body() body: StartSeasonDto) {
     return this.adminService.startSeason(req.user, body);
   }
 

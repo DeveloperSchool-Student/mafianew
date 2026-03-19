@@ -82,6 +82,9 @@ export interface Player {
     staffRoleColor?: string | null;
     lastWill?: string | null;
     isBot?: boolean;
+    isKicked?: boolean;
+    isReady?: boolean;
+    level?: number;
 }
 
 /** A vote cast during DAY_VOTING */

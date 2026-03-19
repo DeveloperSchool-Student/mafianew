@@ -42,7 +42,7 @@ export interface ClanWar {
     endedAt: string | null;
     challenger?: { name: string };
     target?: { name: string };
-    contributions?: any[];
+    contributions?: { userId: string; username?: string; points: number }[];
 }
 
 export async function fetchClans(token: string): Promise<Clan[]> {

@@ -29,7 +29,9 @@ const loadHistory = (): HistoryNotification[] => {
     try {
         const data = localStorage.getItem('mafia_notifications_history');
         if (data) return JSON.parse(data);
-    } catch (e) { }
+    } catch (e) {
+        console.error('Failed to parse notification history:', e);
+    }
     return [];
 };
 
@@ -59,8 +61,12 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
         try {
             const audio = new Audio('/sounds/notification.mp3');
             audio.volume = 0.5;
-            audio.play().catch(() => { });
-        } catch (e) { }
+            audio.play().catch((e) => {
+                console.warn('Audio play prevented or failed:', e);
+            });
+        } catch (e) {
+            console.error('Failed to initialize or play notification sound:', e);
+        }
 
         const duration = notification.duration || 5000;
         if (duration > 0) {

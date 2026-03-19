@@ -33,9 +33,17 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
     const me = gameState.players?.find((p: Player) => p.userId === user?.id);
     const hasVoted = gameState.votes?.some((v: Vote) => v.voterId === user?.id);
 
-    const handleWhisperSend = (message: string) => {
-        if (!whisperTarget || !socket || !gameState.roomId) return;
-        socket.emit('whisper', { roomId: gameState.roomId, targetId: whisperTarget.userId, message });
+    const handleWhisperSend = async (message: string): Promise<{ success: boolean; error?: string }> => {
+        if (!whisperTarget || !socket || !gameState.roomId) return { success: false, error: 'Connection error' };
+        return new Promise((resolve) => {
+            socket.emit('whisper', { roomId: gameState.roomId, targetId: whisperTarget.userId, message }, (res: any) => {
+                if (res && res.success !== undefined) {
+                    resolve(res);
+                } else {
+                    resolve({ success: true }); // Fallback if backend didn't ack
+                }
+            });
+        });
     };
 
     const handleReportSubmit = async (reason: string, screenshotUrl?: string): Promise<{ success: boolean; error?: string }> => {
@@ -52,7 +60,7 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
 
     return (
         <>
-            <div className="bg-mafia-gray border border-gray-800 rounded p-3 sm:p-4 h-auto md:h-[600px] overflow-y-auto">
+            <div className="bg-mafia-gray border border-gray-800 rounded p-2 sm:p-4 h-auto md:h-[600px] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-4 border-b border-gray-700 pb-2">ГРАВЦІ ({gameState.players?.length || 0})</h3>
                 <div className="space-y-2 sm:space-y-3">
                     {gameState.players?.map((p: Player, idx: number) => {
@@ -87,10 +95,10 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                                         } transition-all duration-200 shadow-md ${isSelectedByJournalist ? 'ring-2 ring-blue-500 bg-[#2a3a4a]' : ''}`
                                         : 'bg-black border-gray-900 scale-[0.98] transition-all duration-[2000ms] grayscale opacity-40 blur-[1px]'
                                     }`}
-                                style={{ minHeight: 50 }}
+                                style={{ minHeight: 56 }}
                             >
-                                <div className="flex items-center gap-3 w-full sm:w-1/2 overflow-hidden">
-                                    <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${p.isAlive ? 'bg-gray-800' : 'bg-red-900/40 text-red-500 line-through'}`}>
+                                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-1/2 overflow-hidden">
+                                    <div className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${p.isAlive ? 'bg-gray-800' : 'bg-red-900/40 text-red-500 line-through'}`}>
                                         {idx + 1}
                                     </div>
                                     <div className="flex flex-col min-w-0">
@@ -112,7 +120,8 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                                             {p.username} {p.userId === user?.id && '(Ви)'}
                                             {p.isSpectator && <span className="ml-2 text-xs italic opacity-70">(Глядач)</span>}
                                         </span>
-                                        {p.isOnline === false && <span className="text-xs text-orange-500 font-bold animate-pulse">🔌 Відключився</span>}
+                                        {p.isOnline === false && <span className="text-[10px] text-orange-500 font-bold animate-pulse leading-none">🔌 Відключився</span>}
+                                        {p.isKicked && <span className="text-[10px] text-red-400 font-bold leading-none">🚫 Вигнано</span>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 self-start sm:self-auto overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 flex-wrap">
@@ -176,7 +185,7 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                                     ? 'bg-yellow-900/10 border-yellow-800/30 opacity-60 cursor-not-allowed'
                                     : 'bg-yellow-900/20 border-yellow-700/50 hover:bg-yellow-900/40 hover:scale-[1.01] active:scale-[0.98] cursor-pointer'
                             } shadow-md`}
-                            style={{ minHeight: 50 }}
+                            style={{ minHeight: 56 }}
                         >
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-sm bg-yellow-900/50 text-yellow-500">

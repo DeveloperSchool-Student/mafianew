@@ -1,24 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../store';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import axios from 'axios';
 import { MessageSquare, Send, ArrowLeft } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface Conversation {
-    user: { id: string; username: string; profile?: { avatarUrl?: string } };
-    lastMessage: { content: string; createdAt: string; readAt: string | null };
-    unreadCount: number;
-}
-
-interface Message {
-    id: string;
-    fromId: string;
-    toId: string;
-    content: string;
-    createdAt: string;
-}
+import { fetchConversations, fetchChatMessages, sendMessage } from '../services/pmApi';
+import type { Conversation, PrivateMessage } from '../services/pmApi';
 
 export function Messages() {
     const { user } = useAppStore();
@@ -26,9 +11,10 @@ export function Messages() {
     const { id: targetId } = useParams();
 
     const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<PrivateMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
+    const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -38,39 +24,36 @@ export function Messages() {
             return;
         }
 
-        fetchConversations();
+        loadConversations();
         if (targetId) {
-            fetchMessages(targetId);
+            loadMessages(targetId);
         } else {
             setLoading(false);
         }
 
-        // Polling for updates (for simplicity without sockets)
         const interval = setInterval(() => {
-            fetchConversations();
-            if (targetId) fetchMessages(targetId, true);
+            loadConversations();
+            if (targetId) loadMessages(targetId, true);
         }, 5000);
         return () => clearInterval(interval);
     }, [user, navigate, targetId]);
 
-    const fetchConversations = async () => {
+    const loadConversations = async () => {
+        if (!user) return;
         try {
-            const res = await axios.get(`${API_URL}/pm/conversations`, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setConversations(res.data);
+            const data = await fetchConversations(user.token);
+            setConversations(data);
         } catch (err) {
             console.error('Failed to fetch conversations', err);
         }
     };
 
-    const fetchMessages = async (targetId: string, background = false) => {
+    const loadMessages = async (targetId: string, background = false) => {
+        if (!user) return;
         if (!background) setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/pm/chat/${targetId}`, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
-            setMessages(res.data);
+            const data = await fetchChatMessages(user.token, targetId);
+            setMessages(data);
             if (!background) scrollToBottom();
         } catch (err) {
             console.error('Failed to fetch messages', err);
@@ -88,17 +71,19 @@ export function Messages() {
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        if (!newMessage.trim() || !targetId) return;
+        if (!newMessage.trim() || !targetId || !user || sending) return;
 
+        setSending(true);
         try {
-            await axios.post(`${API_URL}/pm/send`, { targetId, content: newMessage }, {
-                headers: { Authorization: `Bearer ${user?.token}` }
-            });
+            await sendMessage(user.token, targetId, newMessage);
             setNewMessage('');
-            fetchMessages(targetId);
-            fetchConversations();
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Помилка відправки');
+            loadMessages(targetId);
+            loadConversations();
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setError(axiosErr.response?.data?.message || 'Помилка відправки');
+        } finally {
+            setSending(false);
         }
     };
 
@@ -205,7 +190,7 @@ export function Messages() {
                                     />
                                     <button
                                         type="submit"
-                                        disabled={!newMessage.trim()}
+                                        disabled={!newMessage.trim() || sending}
                                         className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900/50 disabled:text-gray-500 text-white p-3 rounded-xl transition-colors flex items-center justify-center aspect-square"
                                     >
                                         <Send size={18} />

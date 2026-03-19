@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FriendsService } from './friends.service';
+import { SendFriendRequestDto } from './dto/friends.dto';
 
 @Controller('friends')
 @UseGuards(AuthGuard('jwt'))
@@ -23,7 +24,7 @@ export class FriendsController {
   @Post('request')
   sendRequest(
     @Request() req: { user: { id: string } },
-    @Body() body: { friendUsername: string },
+    @Body() body: SendFriendRequestDto,
   ) {
     return this.friendsService.sendRequest(req.user.id, body.friendUsername);
   }

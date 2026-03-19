@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,9 +10,10 @@ import { MobileChatDrawer } from '../components/MobileChatDrawer';
 import { MobileGameHeader } from '../components/MobileGameHeader';
 import { MobileActionStatus } from '../components/MobileActionStatus';
 import { WinAnimation } from '../components/WinAnimation';
-import type { Player, Vote, GameRole } from '../types/game';
-import { ROLE_ACTION_MAP } from '../types/game';
+import type { Player, Vote } from '../types/game';
 import { useGameSocket } from '../hooks/useGameSocket';
+import { useGameActions } from '../hooks/useGameActions';
+import { useMobileChatUI } from '../hooks/useMobileChatUI';
 import { getPhaseLabel, getRoleLabel, getRoleColor, getBgColor } from '../game/gameHelpers';
 
 // Hook to detect mobile viewport
@@ -27,7 +28,7 @@ function useIsMobile(breakpoint = 768) {
 }
 
 export function Game() {
-    const { user, gameState, socket, soundSettings, updateSoundSettings } = useAppStore();
+    const { user, gameState, soundSettings, updateSoundSettings } = useAppStore();
     const { t } = useTranslation();
     const isMobile = useIsMobile();
 
@@ -35,100 +36,27 @@ export function Game() {
     // Abstracted socket logic
     const { showPhaseOverlay, overlayPhase } = useGameSocket();
 
-    const [donMode, setDonMode] = useState<'KILL' | 'CHECK_DON'>('KILL');
-    const [lastWill, setLastWill] = useState('');
-    const [showLastWill, setShowLastWill] = useState(false);
+    // Game action logic (voting, night actions, veto)
+    const {
+        hasActedNight,
+        nightTargetName,
+        donMode,
+        setDonMode,
+        journalistTargets,
+        setJournalistTargets,
+        lastWill,
+        setLastWill,
+        showLastWill,
+        setShowLastWill,
+        submitLastWill,
+        handleAction,
+        handleVeto
+    } = useGameActions();
+
+    // Mobile Chat UI logically bound
+    const { isChatOpen, setIsChatOpen, unreadCount } = useMobileChatUI(isMobile);
+
     const [showSoundSettings, setShowSoundSettings] = useState(false);
-
-    // Mobile chat drawer state
-    const [isChatOpen, setIsChatOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [lastSeenChatLen, setLastSeenChatLen] = useState(0);
-
-    // Night action tracking
-    const [hasActedNight, setHasActedNight] = useState(false);
-    const [nightTargetName, setNightTargetName] = useState('');
-
-    // Journalist targets (lifted state)
-    const [journalistTargets, setJournalistTargets] = useState<string[]>([]);
-
-    // Track unread messages when chat is closed on mobile
-    useEffect(() => {
-        if (isMobile && !isChatOpen) {
-            const currentLen = gameState.chat?.length || 0;
-            if (currentLen > lastSeenChatLen) {
-                setUnreadCount(prev => prev + (currentLen - lastSeenChatLen));
-            }
-            setLastSeenChatLen(currentLen);
-        }
-    }, [gameState.chat?.length, isMobile, isChatOpen]);
-
-    // Reset unread when chat opens
-    useEffect(() => {
-        if (isChatOpen) {
-            setUnreadCount(0);
-            setLastSeenChatLen(gameState.chat?.length || 0);
-        }
-    }, [isChatOpen, gameState.chat?.length]);
-
-    // Reset night action state on phase change
-    useEffect(() => {
-        setHasActedNight(false);
-        setNightTargetName('');
-        setJournalistTargets([]);
-    }, [gameState.phase]);
-
-    const submitLastWill = () => {
-        if (!socket || !gameState.roomId) return;
-        socket.emit('save_last_will', { roomId: gameState.roomId, lastWill });
-        setShowLastWill(false);
-    };
-
-    const handleAction = useCallback((targetId: string) => {
-        if (!socket || !gameState.roomId) return;
-        // Dead players can't act
-        const me = gameState.players?.find(p => p.userId === user?.id);
-        if (!me?.isAlive) return;
-
-        if (gameState.phase === 'DAY_VOTING') {
-            // Check if already voted
-            const alreadyVoted = gameState.votes?.some((v: Vote) => v.voterId === user?.id);
-            if (alreadyVoted) {
-                // Notify user they already voted
-                const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Ви вже проголосували! Змінити голос неможливо.', type: 'system' as const };
-                useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
-                return;
-            }
-            socket.emit('vote', { roomId: gameState.roomId, targetId });
-        } else if (gameState.phase === 'NIGHT') {
-            if (hasActedNight) {
-                const newMsg = { id: Date.now().toString(), sender: 'Система', text: 'Нічну дію вже обрано. Чекайте на світанок.', type: 'system' as const };
-                useAppStore.getState().setGameState(state => ({ chat: [...state.chat, newMsg] }));
-                return;
-            }
-
-            // Determine action type from role using the map
-            let actionType: string = '';
-            const myRole = gameState.myRole as GameRole | null;
-
-            if (myRole === 'DON') {
-                actionType = donMode; // DON has dual mode
-            } else if (myRole && myRole in ROLE_ACTION_MAP) {
-                actionType = ROLE_ACTION_MAP[myRole] || '';
-            }
-
-            if (actionType) {
-                socket.emit('night_action', { roomId: gameState.roomId, targetId, actionType });
-                // Track night action for feedback
-                const targetPlayer = gameState.players?.find((p: Player) =>
-                    targetId.includes(',') ? targetId.split(',').includes(p.userId) : p.userId === targetId
-                );
-                setHasActedNight(true);
-                setNightTargetName(targetPlayer?.username || '');
-            }
-        }
-    }, [socket, gameState.roomId, gameState.phase, gameState.myRole, gameState.votes, gameState.players, user?.id, donMode]);
-
 
     const me = gameState.players?.find(p => p.userId === user?.id);
     const isGameOver = gameState.phase === 'END_GAME';
@@ -172,7 +100,7 @@ export function Game() {
         <motion.div
             animate={{ backgroundColor: getBgColor(gameState.phase) }}
             transition={{ duration: 2, ease: "easeInOut" }}
-            className={`text-mafia-light flex flex-col items-center ${isMobile ? 'h-[100dvh] overflow-hidden' : 'min-h-screen py-6 px-4'}`}
+            className={`text-mafia-light flex flex-col items-center ${isMobile ? 'h-[100dvh] overflow-hidden no-overscroll' : 'min-h-screen py-6 px-4'}`}
         >
 
             {/* Game Over Animation */}
@@ -219,6 +147,8 @@ export function Game() {
                         roleColor={getRoleColor(gameState.myRole)}
                         isGameOver={isGameOver}
                         isSpectator={me?.isSpectator || false}
+                        alivePlayers={gameState.players?.filter(p => p.isAlive && !p.isSpectator).length}
+                        totalPlayers={gameState.players?.filter(p => !p.isSpectator).length}
                         isMuted={soundSettings.master === 0}
                         onSoundClick={() => setShowSoundSettings(true)}
                     />
@@ -233,7 +163,7 @@ export function Game() {
                             <h3 className="text-lg font-bold text-white mb-1 tracking-widest uppercase">Рішення Мера</h3>
                             <p className="mb-3 text-red-200 text-sm">Накладіть ВЕТО, щоб врятувати гравця від страти.</p>
                             <button
-                                onClick={() => socket?.emit('use_veto', { roomId: gameState.roomId })}
+                                onClick={handleVeto}
                                 className="bg-black hover:bg-gray-900 active:bg-gray-800 border border-red-500 text-white font-bold py-3 px-6 rounded transition text-base tracking-wider"
                                 style={{ minHeight: 48 }}
                             >
@@ -339,7 +269,7 @@ export function Game() {
                             <h3 className="text-2xl font-bold text-white mb-2 tracking-widest uppercase">Рішення Мера</h3>
                             <p className="mb-4 text-red-200">Ви можете накласти ВЕТО і врятувати цього гравця від страти.</p>
                             <button
-                                onClick={() => socket?.emit('use_veto', { roomId: gameState.roomId })}
+                                onClick={handleVeto}
                                 className="bg-black hover:bg-gray-900 border border-red-500 hover:border-red-400 text-white font-bold py-3 px-8 rounded transition duration-200 drop-shadow-md text-lg tracking-wider"
                             >
                                 НАКЛАСТИ ВЕТО

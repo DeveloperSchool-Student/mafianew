@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { X, AlertTriangle } from 'lucide-react';
 import { useAppStore } from '../store';
 import { useTranslation } from 'react-i18next';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { fetchMyReports } from '../services/adminApi';
+import { submitReport } from '../services/gameApi';
+import type { Report } from '../types/api';
+import { useToastStore } from '../store/toastStore';
 
 interface ReportModalProps {
     isOpen: boolean;
@@ -15,21 +16,20 @@ interface ReportModalProps {
 export function ReportModal({ isOpen, onClose, recentPlayers = [] }: ReportModalProps) {
     const { user } = useAppStore();
     const { t } = useTranslation();
+    const { addToast } = useToastStore();
     const [targetUsername, setTargetUsername] = useState('');
     const [reasonCategory, setReasonCategory] = useState('');
     const [comment, setComment] = useState('');
     const [screenshotUrl, setScreenshotUrl] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [myReports, setMyReports] = useState<any[]>([]);
+    const [myReports, setMyReports] = useState<Report[]>([]);
     const [showMyReports, setShowMyReports] = useState(false);
 
     useEffect(() => {
         if (isOpen && user) {
             setReasonCategory(t('report.cat_insult'));
             // Load my reports
-            axios.get(`${API_URL}/admin/my-reports`, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            }).then(res => setMyReports(res.data)).catch(() => { });
+            fetchMyReports(user.token).then(data => setMyReports(data)).catch((e) => { console.warn('Failed to load my reports:', e); });
         }
     }, [isOpen, user]);
 
@@ -46,31 +46,29 @@ export function ReportModal({ isOpen, onClose, recentPlayers = [] }: ReportModal
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!targetUsername.trim()) {
-            alert(t('report.enter_nick'));
+            addToast('error', t('report.enter_nick'));
             return;
         }
 
         setIsSubmitting(true);
-        try {
-            const finalReason = comment ? `${reasonCategory}: ${comment}` : reasonCategory;
+        const finalReason = comment ? `${reasonCategory}: ${comment}` : reasonCategory;
+        
+        const result = await submitReport(user.token, {
+            targetUsername: targetUsername.trim(),
+            reason: finalReason,
+            screenshotUrl: screenshotUrl || undefined
+        });
 
-            await axios.post(`${API_URL}/admin/reports`, {
-                targetUsername: targetUsername.trim(),
-                reason: finalReason,
-                screenshotUrl: screenshotUrl || undefined
-            }, {
-                headers: { Authorization: `Bearer ${user.token}` }
-            });
+        setIsSubmitting(false);
 
-            alert(`✅ ${t('common.success')}`);
+        if (result.success) {
+            addToast('success', `✅ ${t('common.success')}`);
             onClose();
             setTargetUsername('');
             setComment('');
             setScreenshotUrl('');
-        } catch (error: any) {
-            alert(error.response?.data?.message || t('common.error'));
-        } finally {
-            setIsSubmitting(false);
+        } else {
+            addToast('error', result.error || t('common.error'));
         }
     };
 

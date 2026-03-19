@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { forgotPassword } from '../services/usersApi';
 
 export function ForgotPassword() {
     const [email, setEmail] = useState('');
@@ -17,10 +15,11 @@ export function ForgotPassword() {
         setStatus(null);
 
         try {
-            const res = await axios.post(`${API_URL}/auth/forgot-password`, { email });
-            setStatus({ type: 'success', msg: res.data.message });
-        } catch (err: any) {
-            setStatus({ type: 'error', msg: err.response?.data?.message || 'Помилка відправки запиту' });
+            const data = await forgotPassword(email);
+            setStatus({ type: 'success', msg: data.message });
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { message?: string } } };
+            setStatus({ type: 'error', msg: axiosErr.response?.data?.message || 'Помилка відправки запиту' });
         } finally {
             setLoading(false);
         }

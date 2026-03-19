@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useAppStore } from '../store';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { useToastStore } from '../store/toastStore';
+import * as adminApi from '../services/adminApi';
 
 interface AdminPanelModalProps {
     showAdminPanel: boolean;
@@ -11,6 +10,7 @@ interface AdminPanelModalProps {
 
 export function AdminPanelModal({ showAdminPanel, setShowAdminPanel }: AdminPanelModalProps) {
     const { user } = useAppStore();
+    const { addToast } = useToastStore();
     const [adminTarget, setAdminTarget] = useState('');
     const [adminAction, setAdminAction] = useState<'PUNISH' | 'GOLD' | 'EXP'>('PUNISH');
     const [adminDuration, setAdminDuration] = useState(3600); // сек, за замовчуванням 1 година
@@ -105,37 +105,26 @@ export function AdminPanelModal({ showAdminPanel, setShowAdminPanel }: AdminPane
                             if (!adminTarget || !user) return;
                             try {
                                 if (adminAction === 'PUNISH') {
-                                    await axios.post(
-                                        `${API_URL}/admin/punish`,
-                                        {
-                                            targetUsername: adminTarget,
-                                            type: adminType,
-                                            durationSeconds: adminType === 'KICK' ? undefined : adminDuration,
-                                            scope: 'GLOBAL',
-                                            reason: adminReason || undefined,
-                                        },
-                                        { headers: { Authorization: `Bearer ${user.token}` } },
-                                    );
+                                    await adminApi.punishUser(user.token, {
+                                        targetUsername: adminTarget,
+                                        type: adminType,
+                                        durationSeconds: adminType === 'KICK' ? undefined : adminDuration,
+                                        scope: 'GLOBAL',
+                                        reason: adminReason || undefined,
+                                    });
                                 } else if (adminAction === 'GOLD') {
-                                    await axios.post(
-                                        `${API_URL}/admin/adjust-gold`,
-                                        { targetUsername: adminTarget, delta: adminDelta },
-                                        { headers: { Authorization: `Bearer ${user.token}` } },
-                                    );
+                                    await adminApi.adjustGold(user.token, adminTarget, adminDelta);
                                 } else if (adminAction === 'EXP') {
-                                    await axios.post(
-                                        `${API_URL}/admin/adjust-exp`,
-                                        { targetUsername: adminTarget, delta: adminDelta },
-                                        { headers: { Authorization: `Bearer ${user.token}` } },
-                                    );
+                                    await adminApi.adjustExp(user.token, adminTarget, adminDelta);
                                 }
-                                alert('Успішно!');
+                                addToast('success', 'Успішно!');
                                 setShowAdminPanel(false);
                                 setAdminTarget('');
                                 setAdminReason('');
                                 setAdminDelta(100);
-                            } catch (err: any) {
-                                alert(err.response?.data?.message || 'Помилка виконання дії');
+                            } catch (err: unknown) {
+                                const axiosErr = err as { response?: { data?: { message?: string } } };
+                                addToast('error', axiosErr.response?.data?.message || 'Помилка виконання дії');
                             }
                         }}
                         className={`flex-1 border text-white font-bold py-2 px-2 rounded text-xs transition-colors uppercase ${adminAction === 'PUNISH' ? 'bg-red-900/70 hover:bg-red-700 border-red-700/80' :

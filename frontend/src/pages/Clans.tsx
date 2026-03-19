@@ -412,8 +412,8 @@ export function Clans() {
                                                 <div className="mt-3 pt-3 border-t border-gray-800">
                                                     <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider font-bold">Топ внесок</p>
                                                     <div className="flex gap-2 flex-wrap text-xs">
-                                                        {w.contributions.slice(0, 5).map((c: any, i: number) => (
-                                                            <span key={c.id} className="bg-[#1a1a1a] border border-gray-700 px-2 py-1 rounded text-gray-300">
+                                                        {w.contributions.slice(0, 5).map((c, i) => (
+                                                            <span key={c.userId} className="bg-[#1a1a1a] border border-gray-700 px-2 py-1 rounded text-gray-300">
                                                                 #{i + 1} <span className="text-white font-medium">{c.userId.slice(0, 6)}...</span> +{c.points}pts
                                                             </span>
                                                         ))}

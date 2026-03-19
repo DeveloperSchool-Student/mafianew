@@ -19,7 +19,7 @@ export function BettingPanel() {
 
     // Has user already placed a bet? We don't have bet info per user sent to clients by default, 
     // but we added bets map to game state. Let's check.
-    const myBet = gameState.bets?.find((b: any) => b.userId === myId);
+    const myBet = gameState.bets?.find((b: { userId: string; faction: string; amount: number }) => b.userId === myId);
 
     if (myBet) {
         return (

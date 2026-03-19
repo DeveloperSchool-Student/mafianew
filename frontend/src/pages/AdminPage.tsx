@@ -1,35 +1,19 @@
 import { useEffect, useState } from 'react';
+import type { ElementType } from 'react';
 import { CoinIcon } from '../components/CoinIcon';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store';
-import axios from 'axios';
+import { useToastStore } from '../store/toastStore';
 import { ArrowLeft, Shield, Users, FileText, Activity, UserCog, Trash2, Award, Eye, Gift, Swords, Calendar, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { TITLES } from '../constants/titles';
+import { STAFF_ROLES, getStaffPower } from '../constants/staffRoles';
+import type { Report, Appeal, AdminUser, AdminLog } from '../types/api';
+import * as adminApi from '../services/adminApi';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+type AxiosError = { response?: { data?: { message?: string } } };
 
-/* ── Role Definitions (mirror of backend admin.roles.ts) ── */
-const STAFF_ROLES = [
-    { key: 'OWNER', title: 'Власник', power: 9, color: '#ff0000' },
-    { key: 'CURATOR', title: 'Куратор Адміністраторів', power: 8, color: '#ff4400' },
-    { key: 'SENIOR_ADMIN', title: 'Старший Адміністратор', power: 7, color: '#ff6600' },
-    { key: 'ADMIN', title: 'Адміністратор', power: 6, color: '#ff8800' },
-    { key: 'JUNIOR_ADMIN', title: 'Молодший Адміністратор', power: 5, color: '#ffaa00' },
-    { key: 'SENIOR_MOD', title: 'Старший Модератор', power: 4, color: '#00ccff' },
-    { key: 'MOD', title: 'Модератор', power: 3, color: '#00aaff' },
-    { key: 'HELPER', title: 'Хелпер', power: 2, color: '#44ddaa' },
-    { key: 'TRAINEE', title: 'Стажер', power: 1, color: '#88cc88' },
-];
-
-function getMyPower(staffRoleKey?: string | null): number {
-    if (!staffRoleKey) return 0;
-    return STAFF_ROLES.find(r => r.key === staffRoleKey)?.power ?? 0;
-}
-
-function headers(token: string) {
-    return { headers: { Authorization: `Bearer ${token}` } };
-}
+const getMyPower = getStaffPower;
 
 type Tab = 'reports' | 'appeals' | 'clanwars' | 'users' | 'staff' | 'logs' | 'duties' | 'leaders' | 'rooms' | 'events' | 'stats' | 'seasons' | 'commands';
 
@@ -48,7 +32,7 @@ export function AdminPage() {
 
     if (!user || myPower === 0) return null;
 
-    const tabs: { key: Tab; label: string; icon: any; minPower: number }[] = [
+    const tabs: { key: Tab; label: string; icon: ElementType; minPower: number }[] = [
         { key: 'reports', label: t('admin.reports'), icon: FileText, minPower: 1 },
         { key: 'appeals', label: 'Апеляції', icon: Shield, minPower: 1 },
         { key: 'clanwars', label: 'Війни Кланів', icon: Swords, minPower: 4 },
@@ -137,38 +121,40 @@ export function AdminPage() {
    REPORTS TAB
    ═══════════════════════════════════════════════════════════ */
 function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
-    const [reports, setReports] = useState<any[]>([]);
+    const [reports, setReports] = useState<Report[]>([]);
     const [filter, setFilter] = useState('OPEN');
     const [loading, setLoading] = useState(false);
+    const [resolveNote, setResolveNote] = useState('');
+    const [resolvingId, setResolvingId] = useState<string | null>(null);
     const { t } = useTranslation();
+    const { addToast } = useToastStore();
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/reports?status=${filter}`, headers(token));
-            setReports(res.data);
-        } catch { }
+            const data = await adminApi.fetchReports(token, filter);
+            setReports(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
     useEffect(() => { load(); }, [filter]);
 
     const resolve = async (id: string, status: 'RESOLVED' | 'REJECTED') => {
-        const note = prompt(t('admin.comment_prompt'));
         try {
-            await axios.post(`${API_URL}/admin/reports/${id}/resolve`, { status, note: note || undefined }, headers(token));
+            await adminApi.resolveReport(token, id, status, resolveNote || undefined);
+            setResolvingId(null);
+            setResolveNote('');
             load();
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     const quickPunish = async (targetUsername: string, type: 'MUTE' | 'BAN', durationSeconds: number, reason: string) => {
         if (!confirm(`${type} ${targetUsername} — ${durationSeconds}s — "${reason}"?`)) return;
         try {
-            await axios.post(`${API_URL}/admin/punish`, {
-                targetUsername, type, durationSeconds, scope: 'GLOBAL', reason
-            }, headers(token));
-            alert(t('admin.punishment_issued'));
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+            await adminApi.punishUser(token, { targetUsername, type, durationSeconds, scope: 'GLOBAL', reason });
+            addToast('success', t('admin.punishment_issued'));
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     return (
@@ -209,16 +195,32 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
                             <p className="text-xs text-gray-600 mt-2">{new Date(r.createdAt).toLocaleString('uk-UA')}</p>
                             {r.status === 'OPEN' && myPower >= 2 && (
                                 <div className="flex flex-col gap-2 mt-3">
-                                    <div className="flex gap-2 flex-wrap">
-                                        <button onClick={() => resolve(r.id, 'RESOLVED')} className="text-xs bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-3 py-1 rounded transition">{t('admin.resolve')}</button>
-                                        <button onClick={() => resolve(r.id, 'REJECTED')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-3 py-1 rounded transition">{t('admin.reject')}</button>
-                                    </div>
+                                    {resolvingId === r.id ? (
+                                        <div className="space-y-2">
+                                            <input
+                                                type="text"
+                                                value={resolveNote}
+                                                onChange={e => setResolveNote(e.target.value)}
+                                                placeholder={t('admin.comment_prompt')}
+                                                className="w-full bg-[#111] border border-gray-700 rounded p-2 text-white text-sm focus:outline-none focus:border-gray-500"
+                                            />
+                                            <div className="flex gap-2">
+                                                <button onClick={() => resolve(r.id, 'RESOLVED')} className="text-xs bg-green-900/50 hover:bg-green-700 border border-green-600 text-green-300 px-3 py-1 rounded transition">{t('admin.resolve')}</button>
+                                                <button onClick={() => resolve(r.id, 'REJECTED')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-3 py-1 rounded transition">{t('admin.reject')}</button>
+                                                <button onClick={() => { setResolvingId(null); setResolveNote(''); }} className="text-xs text-gray-500 hover:text-white px-2 py-1 transition">Скасувати</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-2 flex-wrap">
+                                            <button onClick={() => setResolvingId(r.id)} className="text-xs bg-blue-900/50 hover:bg-blue-700 border border-blue-600 text-blue-300 px-3 py-1 rounded transition">Розглянути</button>
+                                        </div>
+                                    )}
                                     {myPower >= 3 && r.target?.username && (
                                         <div className="flex gap-2 flex-wrap">
                                             <span className="text-xs text-gray-500 py-1">{t('admin.quick_action')}</span>
-                                            <button onClick={() => quickPunish(r.target.username, 'MUTE', 3600, 'Скарги: Порушення правил')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1h</button>
-                                            <button onClick={() => quickPunish(r.target.username, 'MUTE', 86400, 'Скарги: Серйозне порушення')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1d</button>
-                                            <button onClick={() => quickPunish(r.target.username, 'BAN', 86400, 'Скарги: Бан 1 день')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-2 py-1 rounded transition">Ban 1d</button>
+                                            <button onClick={() => quickPunish(r.target?.username || '', 'MUTE', 3600, 'Скарги: Порушення правил')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1h</button>
+                                            <button onClick={() => quickPunish(r.target?.username || '', 'MUTE', 86400, 'Скарги: Серйозне порушення')} className="text-xs bg-orange-900/50 hover:bg-orange-700 border border-orange-600 text-orange-300 px-2 py-1 rounded transition">Mute 1d</button>
+                                            <button onClick={() => quickPunish(r.target?.username || '', 'BAN', 86400, 'Скарги: Бан 1 день')} className="text-xs bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 px-2 py-1 rounded transition">Ban 1d</button>
                                         </div>
                                     )}
                                 </div>
@@ -231,20 +233,23 @@ function ReportsTab({ token, myPower, onUserAction }: { token: string; myPower: 
     );
 }
 
+
+
 /* ═══════════════════════════════════════════════════════════
    APPEALS TAB
    ═══════════════════════════════════════════════════════════ */
 function AppealsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
-    const [appeals, setAppeals] = useState<any[]>([]);
+    const { addToast } = useToastStore();
+    const [appeals, setAppeals] = useState<Appeal[]>([]);
     const [filter, setFilter] = useState('PENDING');
     const [loading, setLoading] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/appeals?status=${filter}`, headers(token));
-            setAppeals(res.data);
-        } catch { }
+            const data = await adminApi.fetchAppeals(token, filter);
+            setAppeals(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -253,9 +258,9 @@ function AppealsTab({ token, myPower, onUserAction }: { token: string; myPower: 
     const resolve = async (id: string, status: 'APPROVED' | 'REJECTED') => {
         if (!confirm(`Ви впевнені, що хочете ${status === 'APPROVED' ? 'СХВАЛИТИ' : 'ВІДХИЛИТИ'} цю апеляцію?`)) return;
         try {
-            await axios.post(`${API_URL}/admin/appeals/${id}/resolve`, { status }, headers(token));
+            await adminApi.resolveAppeal(token, id, status);
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
     return (
@@ -319,7 +324,8 @@ const PUNISH_TEMPLATES = [
 ];
 
 function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: string; myPower: number; actionTarget: string; setActionTarget: (u: string) => void }) {
-    const [users, setUsers] = useState<any[]>([]);
+    const { addToast } = useToastStore();
+    const [users, setUsers] = useState<AdminUser[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
@@ -336,14 +342,14 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
         setLoading(true);
         try {
             const currentCursor = reset ? null : cursor;
-            const res = await axios.get(`${API_URL}/admin/users?limit=50${currentCursor ? `&cursor=${currentCursor}` : ''}`, headers(token));
+            const res = await adminApi.fetchAdminUsers(token, currentCursor);
             if (reset) {
-                setUsers(res.data.data);
+                setUsers(res.data);
             } else {
-                setUsers(prev => [...prev, ...res.data.data]);
+                setUsers(prev => [...prev, ...res.data]);
             }
-            setCursor(res.data.nextCursor);
-        } catch { }
+            setCursor(res.nextCursor);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -355,24 +361,24 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
         if (!actionTarget) return;
         try {
             if (actionType === 'PUNISH') {
-                await axios.post(`${API_URL}/admin/punish`, {
+                await adminApi.punishUser(token, {
                     targetUsername: actionTarget, type: punishType,
                     durationSeconds: (punishType === 'KICK' || punishType === 'WARN') ? undefined : duration,
                     scope: 'GLOBAL', reason: reason || undefined,
-                }, headers(token));
+                });
             } else if (actionType === 'GOLD') {
-                await axios.post(`${API_URL}/admin/adjust-gold`, { targetUsername: actionTarget, delta }, headers(token));
+                await adminApi.adjustGold(token, actionTarget, delta);
             } else if (actionType === 'EXP') {
-                await axios.post(`${API_URL}/admin/adjust-exp`, { targetUsername: actionTarget, delta }, headers(token));
+                await adminApi.adjustExp(token, actionTarget, delta);
             } else if (actionType === 'NICK') {
-                await axios.post(`${API_URL}/admin/change-nickname`, { targetUsername: actionTarget, newUsername: newNick }, headers(token));
+                await adminApi.changeNickname(token, actionTarget, newNick);
             } else if (actionType === 'DELETE') {
                 if (!confirm(t('admin.confirm_delete', { username: actionTarget }))) return;
-                await axios.post(`${API_URL}/admin/delete-user`, { targetUsername: actionTarget }, headers(token));
+                await adminApi.deleteUser(token, actionTarget);
             }
-            alert(`✅ ${t('common.success')}`);
+            addToast('success', `✅ ${t('common.success')}`);
             load(true);
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     return (
@@ -460,7 +466,7 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                                     const idx = Number(e.target.value);
                                     setTemplateIndex(idx);
                                     if (idx !== 0) {
-                                        setPunishType(PUNISH_TEMPLATES[idx].type as any);
+                                        setPunishType(PUNISH_TEMPLATES[idx].type as 'KICK' | 'BAN' | 'MUTE' | 'WARN');
                                         setDuration(PUNISH_TEMPLATES[idx].duration);
                                         setReason(PUNISH_TEMPLATES[idx].reason);
                                     }
@@ -473,7 +479,7 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
                             </select>
 
                             <div className="grid grid-cols-2 gap-3 mb-3">
-                                <select value={punishType} onChange={e => { setPunishType(e.target.value as any); setTemplateIndex(0); }} className="bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm">
+                                <select value={punishType} onChange={e => { setPunishType(e.target.value as 'KICK' | 'BAN' | 'MUTE' | 'WARN'); setTemplateIndex(0); }} className="bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white text-sm">
                                     <option value="WARN">⚠️ Warn</option>
                                     <option value="KICK">Kick</option>
                                     <option value="BAN">Ban</option>
@@ -526,9 +532,10 @@ function UsersTab({ token, myPower, actionTarget, setActionTarget }: { token: st
    STAFF TAB
    ═══════════════════════════════════════════════════════════ */
 function StaffTab({ token, myPower }: { token: string; myPower: number }) {
+    const { addToast } = useToastStore();
     const { socket } = useAppStore();
-    const [staff, setStaff] = useState<any[]>([]);
-    const [onlineStaff, setOnlineStaff] = useState<any[]>([]);
+    const [staff, setStaff] = useState<AdminUser[]>([]);
+    const [onlineStaff, setOnlineStaff] = useState<{ userId: string, username?: string, staffRoleColor?: string, staffRoleTitle?: string }[]>([]);
     const [newStaffUsername, setNewStaffUsername] = useState('');
     const [newStaffRole, setNewStaffRole] = useState('TRAINEE');
     const [loading, setLoading] = useState(false);
@@ -537,9 +544,9 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/staff`, headers(token));
-            setStaff(res.data);
-        } catch { }
+            const data = await adminApi.fetchStaff(token);
+            setStaff(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -548,7 +555,7 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
     // Listen for online staff updates
     useEffect(() => {
         if (!socket) return;
-        const handleStaffOnline = (data: any[]) => {
+        const handleStaffOnline = (data: { userId: string, username?: string, staffRoleColor?: string, staffRoleTitle?: string }[]) => {
             setOnlineStaff(data);
         };
         socket.on('staff_online_update', handleStaffOnline);
@@ -558,19 +565,19 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
     const assignRole = async () => {
         if (!newStaffUsername) return;
         try {
-            await axios.post(`${API_URL}/admin/staff/set-role`, { targetUsername: newStaffUsername, roleKey: newStaffRole }, headers(token));
-            alert(t('admin.role_assigned'));
+            await adminApi.setStaffRole(token, newStaffUsername, newStaffRole);
+            addToast('success', t('admin.role_assigned'));
             setNewStaffUsername('');
             load();
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     const removeRole = async (username: string) => {
         if (!confirm(t('admin.confirm_remove_role', { username }))) return;
         try {
-            await axios.post(`${API_URL}/admin/staff/remove-role`, { targetUsername: username }, headers(token));
+            await adminApi.removeStaffRole(token, username);
             load();
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     const availableRoles = STAFF_ROLES.filter(r => r.power < myPower || myPower >= 9);
@@ -679,6 +686,7 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
    LOGS TAB
    ═══════════════════════════════════════════════════════════ */
 function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
+    const { addToast } = useToastStore();
     const [logs, setLogs] = useState<any[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -689,14 +697,14 @@ function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: num
         setLoading(true);
         try {
             const currentCursor = reset ? null : cursor;
-            const res = await axios.get(`${API_URL}/admin/logs?limit=50${currentCursor ? `&cursor=${currentCursor}` : ''}`, headers(token));
+            const res = await adminApi.fetchAdminLogs(token, currentCursor);
             if (reset) {
-                setLogs(res.data.data);
+                setLogs(res.data);
             } else {
-                setLogs(prev => [...prev, ...res.data.data]);
+                setLogs(prev => [...prev, ...res.data]);
             }
-            setCursor(res.data.nextCursor);
-        } catch { }
+            setCursor(res.nextCursor);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -706,12 +714,11 @@ function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: num
         const label = clearDays === 'all' ? 'ВСІ логи' : `логи старші за ${clearDays} днів`;
         if (!confirm(`Ви впевнені? Буде видалено ${label}. Цю дію неможливо скасувати.`)) return;
         try {
-            const body: any = {};
-            if (clearDays !== 'all') body.olderThanDays = clearDays;
-            const res = await axios.post(`${API_URL}/admin/logs/clear`, body, headers(token));
-            alert(`✅ Видалено ${res.data.deleted} записів`);
+            const olderThanDays = clearDays === 'all' ? undefined : clearDays;
+            const result = await adminApi.clearAdminLogs(token, olderThanDays);
+            addToast('success', `✅ Видалено ${result.deleted} записів`);
             load(true);
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
     return (
@@ -823,6 +830,7 @@ function DutiesTab() {
    LEADERS (TITLES) TAB
    ═══════════════════════════════════════════════════════════ */
 function LeadersTab({ token }: { token: string }) {
+    const { addToast } = useToastStore();
     const [targetUsername, setTargetUsername] = useState('');
     const [selectedTitle, setSelectedTitle] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -831,15 +839,12 @@ function LeadersTab({ token }: { token: string }) {
     const assignTitle = async () => {
         if (!targetUsername) return;
         try {
-            await axios.post(`${API_URL}/admin/set-title`, {
-                targetUsername,
-                title: selectedTitle || null // Empty string means remove title
-            }, headers(token));
-            alert('Титул успішно оновлено!');
+            await adminApi.setTitle(token, targetUsername, selectedTitle || null);
+            addToast('success', 'Титул успішно оновлено!');
             setTargetUsername('');
             setSelectedTitle('');
             setSearchTerm('');
-        } catch (e: any) { alert(e.response?.data?.message || t('common.error')); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || t('common.error')); }
     };
 
     const filteredTitles = TITLES.filter(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -912,7 +917,8 @@ function LeadersTab({ token }: { token: string }) {
    ROOMS TAB
    ═══════════════════════════════════════════════════════════ */
 function RoomsTab({ token }: { token: string }) {
-    const [rooms, setRooms] = useState<any[]>([]);
+    const { addToast } = useToastStore();
+    const [rooms, setRooms] = useState<adminApi.AdminRoom[]>([]);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const { socket } = useAppStore();
@@ -920,9 +926,9 @@ function RoomsTab({ token }: { token: string }) {
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/rooms`, { headers: { Authorization: `Bearer ${token}` } });
-            setRooms(res.data);
-        } catch { }
+            const data = await adminApi.fetchAdminRooms(token);
+            setRooms(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -931,7 +937,7 @@ function RoomsTab({ token }: { token: string }) {
     const spectate = (roomId: string, status: string) => {
         if (!socket) return;
         if (status !== 'IN_PROGRESS') {
-            alert('Неможливо переглядати кімнату до початку гри.');
+            addToast('error', 'Неможливо переглядати кімнату до початку гри.');
             return;
         }
         socket.emit('spectate_room', { roomId });
@@ -941,10 +947,10 @@ function RoomsTab({ token }: { token: string }) {
     const closeRoom = async (roomId: string) => {
         if (!confirm(`Ви впевнені, що хочете закрити кімнату ${roomId}?`)) return;
         try {
-            await axios.post(`${API_URL}/admin/rooms/${roomId}/close`, {}, { headers: { Authorization: `Bearer ${token}` } });
-            alert('Кімнату успішно закрито.');
+            await adminApi.closeRoom(token, roomId);
+            addToast('success', 'Кімнату успішно закрито.');
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
     return (
@@ -953,7 +959,7 @@ function RoomsTab({ token }: { token: string }) {
             <button onClick={load} className="mb-4 bg-[#1a1a1a] border border-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded transition">Оновити</button>
             {loading ? <p className="text-gray-500">Завантаження...</p> : rooms.length === 0 ? <p className="text-gray-500">Немає активних кімнат.</p> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {rooms.map((r: any) => (
+                    {rooms.map((r) => (
                         <div key={r.id} className="bg-[#1a1a1a] border border-gray-800 rounded p-4 flex flex-col justify-between">
                             <div>
                                 <h3 className="font-bold text-lg text-white mb-2">Кімната: {r.id}</h3>
@@ -995,6 +1001,7 @@ function RoomsTab({ token }: { token: string }) {
    EVENTS TAB
    ═══════════════════════════════════════════════════════════ */
 function EventsTab({ token }: { token: string }) {
+    const { addToast } = useToastStore();
     const [eventName, setEventName] = useState('');
     const [rewardCoins, setRewardCoins] = useState<number | ''>('');
     const [loading, setLoading] = useState(false);
@@ -1018,7 +1025,7 @@ function EventsTab({ token }: { token: string }) {
 
     const handleLaunch = async () => {
         if (!eventName || eventName.trim().length < 3) {
-            alert('Назва івенту занадто коротка. Мінімум 3 символи.');
+            addToast('error', 'Назва івенту занадто коротка. Мінімум 3 символи.');
             return;
         }
 
@@ -1030,19 +1037,19 @@ function EventsTab({ token }: { token: string }) {
 
         setLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/admin/events/launch`, {
+            const result = await adminApi.launchEvent(token, {
                 eventName,
                 rewardCoins: rewardCoins === '' ? 0 : Number(rewardCoins),
                 eventRoles: enableEventRoles ? selectedRoles : []
-            }, headers(token));
+            });
 
-            alert(`Успіх! ${res.data.message} ${res.data.rewardedUsers ? `(Нагороджено користувачів: ${res.data.rewardedUsers})` : ''}${res.data.activatedRoles?.length ? `\nАктивовані ролі: ${res.data.activatedRoles.join(', ')}` : ''}`);
+            addToast('success', `Успіх! ${result.message} ${result.rewardedUsers ? `(Нагороджено: ${result.rewardedUsers})` : ''}`);
             setEventName('');
             setRewardCoins('');
             setSelectedRoles([]);
             setEnableEventRoles(false);
-        } catch (e: any) {
-            alert(e.response?.data?.message || 'Помилка запуску івенту');
+        } catch (e: unknown) {
+            addToast('error', (e as AxiosError).response?.data?.message || 'Помилка запуску івенту');
         }
         setLoading(false);
     };
@@ -1143,27 +1150,29 @@ function EventsTab({ token }: { token: string }) {
    CLAN WARS TAB
    ═══════════════════════════════════════════════════════════ */
 function ClanWarsTab({ token }: { token: string }) {
-    const [wars, setWars] = useState<any[]>([]);
+    const [wars, setWars] = useState<adminApi.AdminClanWar[]>([]);
     const [filter, setFilter] = useState('ACTIVE');
     const [loading, setLoading] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/clan-wars?status=${filter}`, headers(token));
-            setWars(res.data);
-        } catch { }
+            const data = await adminApi.fetchAdminClanWars(token, filter);
+            setWars(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
     useEffect(() => { load(); }, [filter]);
 
+    const { addToast } = useToastStore();
+
     const resolveWar = async (warId: string, winnerId: string | null) => {
         if (!confirm(`Ви впевнені, що хочете визначити ${winnerId ? 'переможця' : 'нічию'} для цієї війни?`)) return;
         try {
-            await axios.post(`${API_URL}/admin/clan-wars/${warId}/resolve`, { winnerId }, headers(token));
+            await adminApi.resolveAdminClanWar(token, warId, winnerId);
             load();
-        } catch (e: any) { alert(e.response?.data?.message || 'Помилка'); }
+        } catch (e: unknown) { addToast('error', (e as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
     return (
@@ -1225,15 +1234,15 @@ function ClanWarsTab({ token }: { token: string }) {
    STATS TAB
    ═══════════════════════════════════════════════════════════ */
 function StatsTab({ token }: { token: string }) {
-    const [stats, setStats] = useState<any>(null);
+    const [stats, setStats] = useState<adminApi.AdminStats | null>(null);
     const [loading, setLoading] = useState(false);
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/stats`, headers(token));
-            setStats(res.data);
-        } catch { }
+            const data = await adminApi.fetchAdminStats(token);
+            setStats(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
@@ -1288,7 +1297,7 @@ function StatsTab({ token }: { token: string }) {
                             <p className="text-gray-500 text-center text-sm">Недостатньо даних</p>
                         ) : (
                             <div className="flex flex-wrap justify-center gap-4">
-                                {stats.popularRoles.map((r: any, idx: number) => (
+                                {stats.popularRoles.map((r, idx) => (
                                     <div key={idx} className="bg-[#222] border border-gray-700 px-4 py-2 rounded-lg text-center min-w-[120px]">
                                         <p className="font-bold text-blue-400 mb-1">{r.role}</p>
                                         <p className="text-xs text-gray-400">{r.count} матчів</p>
@@ -1307,37 +1316,38 @@ function StatsTab({ token }: { token: string }) {
    SEASONS TAB
    ═══════════════════════════════════════════════════════════ */
 function SeasonsTab({ token }: { token: string }) {
-    const [seasons, setSeasons] = useState<any[]>([]);
+    const { addToast } = useToastStore();
+    const [seasons, setSeasons] = useState<adminApi.Season[]>([]);
     const [loading, setLoading] = useState(false);
     const [newSeasonName, setNewSeasonName] = useState('');
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/seasons`, headers(token));
-            setSeasons(res.data);
-        } catch { }
+            const data = await adminApi.fetchSeasons(token);
+            setSeasons(data);
+        } catch (e) { console.error('Admin fetch error:', e); }
         setLoading(false);
     };
 
     useEffect(() => { load(); }, []);
 
-    const startSeason = async (e: React.FormEvent) => {
+    const startSeasonAction = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await axios.post(`${API_URL}/admin/seasons/start`, { name: newSeasonName }, headers(token));
+            await adminApi.startSeason(token, newSeasonName);
             setNewSeasonName('');
             load();
-        } catch (err: any) { alert(err.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) { addToast('error', (err as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
-    const endSeason = async () => {
+    const endSeasonAction = async () => {
         if (!confirm('Ви дійсно хочете завершити поточний сезон? Це скине MMR всіх гравців до 1500 і видасть нагороди топ-100. Дія незворотна!')) return;
         try {
-            const res = await axios.post(`${API_URL}/admin/seasons/end`, {}, headers(token));
-            alert(`Сезон успішно завершено! Видано нагород: ${res.data.rewardsGiven}`);
+            const result = await adminApi.endSeason(token);
+            addToast('success', `Сезон успішно завершено! Видано нагород: ${result.rewardsGiven}`);
             load();
-        } catch (err: any) { alert(err.response?.data?.message || 'Помилка'); }
+        } catch (err: unknown) { addToast('error', (err as AxiosError).response?.data?.message || 'Помилка'); }
     };
 
     return (
@@ -1352,14 +1362,14 @@ function SeasonsTab({ token }: { token: string }) {
                     <div>
                         <p className="text-xl text-green-400 font-bold mb-2">Активний: {seasons[0].name}</p>
                         <p className="text-sm text-gray-400 mb-6">Початок: {new Date(seasons[0].startDate).toLocaleString('uk-UA')}</p>
-                        <button onClick={endSeason} className="bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 font-bold px-4 py-2 rounded transition w-full sm:w-auto">
+                        <button onClick={endSeasonAction} className="bg-red-900/50 hover:bg-red-700 border border-red-600 text-red-300 font-bold px-4 py-2 rounded transition w-full sm:w-auto">
                             Завершити Сезон та Роздати Нагороди (Reset MMR)
                         </button>
                     </div>
                 ) : (
                     <div>
                         <p className="text-gray-500 mb-4">Наразі немає активного сезону.</p>
-                        <form onSubmit={startSeason} className="flex gap-2 flex-col sm:flex-row">
+                        <form onSubmit={startSeasonAction} className="flex gap-2 flex-col sm:flex-row">
                             <input
                                 type="text"
                                 placeholder="Введіть назву нового сезону (напр. 'Сезон 1')"

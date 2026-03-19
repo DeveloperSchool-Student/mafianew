@@ -522,7 +522,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     @ConnectedSocket() client: Socket,
   ) {
     data.message = sanitize(data.message, 200);
-    if (!data.message) return;
+    if (!data.message) return { success: false, error: 'Порожнє повідомлення' };
     const success = await this.gameService.handleWhisper(
       data.roomId,
       client.data.user.sub,
@@ -539,11 +539,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       },
     );
     if (!success) {
-      client.emit(
-        'error',
-        'Не вдалося надіслати шепіт (перевірте баланс або ціль).',
-      );
+      const errorMsg = 'Не вдалося надіслати шепіт (перевірте баланс або ціль).';
+      client.emit('error', errorMsg);
+      return { success: false, error: errorMsg };
     }
+    return { success: true };
   }
 
   @SubscribeMessage('use_veto')

@@ -11,6 +11,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import * as crypto from 'crypto';
 
+import { MatchRecordingService } from './logic/match-recording.service';
+import { WinConditionService } from './logic/win-condition.service';
+import { SpectatorBetService } from './logic/spectator-bet.service';
+import { NightActionResolutionService } from './logic/night-action-resolution.service';
+import { VotingResolutionService } from './logic/voting-resolution.service';
+import { RoleDistributionService } from './logic/role-distribution.service';
+
 @Injectable()
 export class GameService implements OnModuleInit {
   private intervals: Map<string, NodeJS.Timeout> = new Map();
@@ -18,6 +25,12 @@ export class GameService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
+    private matchRecording: MatchRecordingService,
+    private winCondition: WinConditionService,
+    private spectatorBet: SpectatorBetService,
+    private nightActionResolution: NightActionResolutionService,
+    private votingResolution: VotingResolutionService,
+    private roleDistribution: RoleDistributionService,
   ) {}
 
   onModuleInit() {
@@ -401,97 +414,17 @@ export class GameService implements OnModuleInit {
     });
     const staffMap = new Map(usersWithStaff.map((u) => [u.id, u]));
 
-    const players: PlayerState[] = room.players.map((p) => {
-      const staffInfo = staffMap.get(p.userId);
-      return {
-        userId: p.userId,
-        username: p.username,
-        role: null,
-        isAlive: true,
-        canUseAction: true,
-        isBot: p.isBot || false,
-        staffRoleKey: staffInfo?.staffRoleKey || null,
-        staffRoleTitle: (staffInfo?.staffRole as any)?.title || null,
-        staffRoleColor: (staffInfo?.staffRole as any)?.color || null,
-      };
-    });
-
     // Assign roles
-    const roles: RoleType[] = [];
-    const mafiaCount = Math.floor(players.length / 3) || 1;
-
-    // Add Mafia / Don
-    let addedMafia = 0;
-    if (players.length >= 7 && mafiaCount > 0) {
-      roles.push(RoleType.DON);
-      addedMafia++;
-    }
-    while (addedMafia < mafiaCount) {
-      roles.push(RoleType.MAFIA);
-      addedMafia++;
-    }
-
-    // Add essential roles
-    roles.push(RoleType.SHERIFF);
-    roles.push(RoleType.DOCTOR);
-
-    // Add extra roles for large games if enabled
-    if (players.length >= 6) roles.push(RoleType.DOCTOR);
-    if (players.length >= 7 && room.settings?.enableJester !== false)
-      roles.push(RoleType.JESTER);
-    if (players.length >= 8 && room.settings?.enableEscort !== false)
-      roles.push(RoleType.ESCORT);
-    if (players.length >= 9 && room.settings?.enableSerialKiller !== false)
-      roles.push(RoleType.SERIAL_KILLER);
-
-    if (room.settings?.enableLawyer) roles.push(RoleType.LAWYER);
-    if (room.settings?.enableBodyguard) roles.push(RoleType.BODYGUARD);
-    if (room.settings?.enableTracker) roles.push(RoleType.TRACKER);
-    if (room.settings?.enableInformer) roles.push(RoleType.INFORMER);
-    if (room.settings?.enableMayor) roles.push(RoleType.MAYOR);
-    if (room.settings?.enableJudge) roles.push(RoleType.JUDGE);
-    if (room.settings?.enableBomber) roles.push(RoleType.BOMBER);
-    if (room.settings?.enableTrapper) roles.push(RoleType.TRAPPER);
-    if (room.settings?.enableSilencer) roles.push(RoleType.SILENCER);
-    if (room.settings?.enableWhore) roles.push(RoleType.WHORE);
-    if (room.settings?.enableJournalist) roles.push(RoleType.JOURNALIST);
-    if (room.settings?.enableLovers) {
-      roles.push(RoleType.LOVERS);
-      roles.push(RoleType.LOVERS);
-    }
-
-    if (roles.length > players.length) {
-      throw new Error(
-        `Увімкнено забагато ролей (${roles.length}) для цієї кількості гравців (${players.length}).`,
-      );
-    }
-
-    // Fill remaining with Citizens
-    while (roles.length < players.length) roles.push(RoleType.CITIZEN);
-
-    // Fisher-Yates shuffle for true randomness
-    for (let i = roles.length - 1; i > 0; i--) {
-      const j = crypto.randomInt(0, i + 1);
-      [roles[i], roles[j]] = [roles[j], roles[i]];
-    }
-
-    players.forEach((p, i) => (p.role = roles[i]));
-
-    const state: GameState = {
+    const state = this.roleDistribution.distributeRoles(
       roomId,
-      phase: GamePhase.ROLE_DISTRIBUTION,
-      players,
-      timerMs: 10000,
-      dayCount: 0,
-      nightActions: new Map(),
-      votes: new Map(),
-      bets: new Map(),
-      logs: [],
-    };
+      room.players,
+      room.settings,
+      staffMap,
+    );
 
     this.pushMatchLog(
       state,
-      `Гра почалася. Кількість учасників: ${players.length}.`,
+      `Гра почалася. Кількість учасників: ${state.players.length}.`,
     );
 
     await this.saveGameState(state);
@@ -618,12 +551,26 @@ export class GameService implements OnModuleInit {
             `Мер не використав право Вето. Рішення залишається в силі.`,
           );
           this.pushMatchLog(state, `Мер не використав Вето.`);
-          await this.executeVictim(
+          const result = await this.votingResolution.executeVictim(
             state,
             gatewayEmitCb,
             state.pendingExecutionId,
           );
           state.pendingExecutionId = null;
+
+          if (result.jesterWon && result.jesterId) {
+            const room = await this.getRoom(state.roomId);
+            await this.matchRecording.awardStats(
+              room?.type,
+              state.players,
+              'БЛАЗЕНЬ',
+              state.logs,
+              result.jesterId,
+              state.dayCount,
+            );
+            this.scheduleReturnToLobby(state, gatewayEmitCb);
+            return;
+          }
         }
         if (await this.checkWinCondition(state, gatewayEmitCb)) return;
 
@@ -743,422 +690,26 @@ export class GameService implements OnModuleInit {
   }
 
   private async resolveNightActions(state: GameState, gatewayEmitCb: Function) {
-    let blockedUserId: string | null = null;
-    let trappedUserId: string | null = null;
-    let silencedUserId: string | null = null;
-    let lawyerTargetId: string | null = null;
-    let bodyguardTargetId: string | null = null;
-    let bombTargetId: string | null = null;
-
-    // Reset silence from previous day
-    state.players.forEach((p) => (p.isSilenced = false));
-
-    // 1. Process blocks and traps first
-    for (const [userId, action] of state.nightActions.entries()) {
-      if (action.type === 'BLOCK') blockedUserId = action.targetId;
-      if (action.type === 'TRAP') trappedUserId = action.targetId;
-      if (action.type === 'SILENCE') silencedUserId = action.targetId;
-      if (action.type === 'DEFEND') lawyerTargetId = action.targetId;
-      if (action.type === 'GUARD') bodyguardTargetId = action.targetId;
-      if (action.type === 'BOMB') bombTargetId = action.targetId;
-
-      const actorUsername = state.players.find(
-        (p) => p.userId === userId,
-      )?.username;
-      const targetUsername = state.players.find(
-        (p) => p.userId === action.targetId,
-      )?.username;
-      if (actorUsername && targetUsername) {
-        this.pushMatchLog(
-          state,
-          `${actorUsername} застосував дію ${action.type} до ${targetUsername}.`,
-        );
-      }
-    }
-
-    if (silencedUserId) {
-      const sp = state.players.find((p) => p.userId === silencedUserId);
-      if (sp) sp.isSilenced = true;
-    }
-
-    let killedByMafia: string | null = null;
-    let killedByManiac: string | null = null;
-    let healedByDoctor: string | null = null;
-
-    const victims = new Set<string>();
-
-    // 2. Collect other actions
-    for (const [userId, action] of state.nightActions.entries()) {
-      let isBlocked = userId === blockedUserId;
-      // Or did they visit a trapped user?
-      if (action.targetId === trappedUserId && action.type !== 'TRAP') {
-        isBlocked = true;
-      }
-
-      if (isBlocked) {
-        gatewayEmitCb(state.roomId, 'private_action_result', {
-          userId,
-          message: 'Ваша дія була заблокована!',
-        });
-        continue; // Action blocked
-      }
-
-      // Bomber logic: anyone who visits the bomb target dies.
-      if (action.targetId === bombTargetId && action.type !== 'BOMB') {
-        victims.add(userId);
-      }
-
-      if (action.type === 'KILL') killedByMafia = action.targetId;
-      if (action.type === 'BOMB') victims.add(action.targetId); // bomb kills target directly
-      if (action.type === 'KILL_SERIAL') killedByManiac = action.targetId;
-      if (action.type === 'HEAL') healedByDoctor = action.targetId;
-
-      if (action.type === 'CHECK' || action.type === 'CHECK_DON') {
-        const target = state.players.find((p) => p.userId === action.targetId);
-        const isMaf =
-          (target?.role === RoleType.MAFIA || target?.role === RoleType.DON) &&
-          action.targetId !== lawyerTargetId;
-
-        let message = '';
-        if (action.type === 'CHECK') {
-          message = `Перевірка Комісара: Гравець ${target?.username} - ${isMaf ? 'МАФІЯ' : 'НЕ МАФІЯ'}.`;
-          // Send directly to the commissar since CHECK keys under userId
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message,
-          });
-        } else {
-          const isSheriff = target?.role === RoleType.SHERIFF;
-          message = `Перевірка Дона: Гравець ${target?.username} - ${isSheriff ? 'ШЕРИФ' : 'НЕ ШЕРИФ'}.`;
-          // Don check is shared under __don_check__, so we need to find the Don to notify
-          const don = state.players.find(
-            (p) => p.role === RoleType.DON && p.isAlive,
-          );
-          if (don) {
-            gatewayEmitCb(state.roomId, 'private_action_result', {
-              userId: don.userId,
-              message,
-            });
-          }
-        }
-      }
-      if (action.type === 'TRACK') {
-        const targetAction = state.nightActions.get(action.targetId);
-        const targetName = state.players.find(
-          (p) => p.userId === action.targetId,
-        )?.username;
-        if (targetAction) {
-          const visitedName = state.players.find(
-            (p) => p.userId === targetAction.targetId,
-          )?.username;
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message: `${targetName} відвідав гравця ${visitedName}.`,
-          });
-        } else {
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message: `${targetName} нікого не відвідував.`,
-          });
-        }
-      }
-      if (action.type === 'INFORM') {
-        const target = state.players.find((p) => p.userId === action.targetId);
-        gatewayEmitCb(state.roomId, 'private_action_result', {
-          userId,
-          message: `Роль ${target?.username}: ${target?.role}.`,
-        });
-      }
-      if (action.type === 'COMPARE') {
-        const ids = action.targetId.split(',');
-        if (ids.length === 2) {
-          const p1 = state.players.find((p) => p.userId === ids[0]);
-          const p2 = state.players.find((p) => p.userId === ids[1]);
-
-          if (p1 && p2) {
-            const getFaction = (role: RoleType | null) => {
-              if (role === RoleType.MAFIA || role === RoleType.DON)
-                return 'MAFIA';
-              if (role === RoleType.SERIAL_KILLER) return 'MANIAC';
-              if (role === RoleType.JESTER) return 'JESTER';
-              return 'CITIZEN';
-            };
-            const result =
-              getFaction(p1.role) === getFaction(p2.role)
-                ? 'ОДНАКОВІ'
-                : 'РІЗНІ';
-            gatewayEmitCb(state.roomId, 'private_action_result', {
-              userId,
-              message: `Журналіст: Гравці ${p1.username} та ${p2.username} - ${result} сторони.`,
-            });
-          }
-        }
-      }
-      if (action.type === 'SHERIFF_KILL') {
-        const target = state.players.find((p) => p.userId === action.targetId);
-        const isGuilty =
-          target?.role === RoleType.MAFIA ||
-          target?.role === RoleType.DON ||
-          target?.role === RoleType.SERIAL_KILLER;
-        if (!isGuilty) {
-          // Sheriff shot an innocent person, so the sheriff dies
-          victims.add(userId);
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message: `Ви застрелили невинного гравця і поплатились за це життям!`,
-          });
-        } else {
-          // Sheriff shot a guilty person
-          victims.add(action.targetId);
-        }
-      }
-    }
-
-    if (killedByMafia && killedByMafia !== healedByDoctor) {
-      if (killedByMafia === bodyguardTargetId) {
-        gatewayEmitCb(
-          state.roomId,
-          'system_chat',
-          `Мафія намагалась вбити, але Охоронець захистив ціль!`,
-        );
-      } else {
-        victims.add(killedByMafia);
-      }
-    } else if (killedByMafia && killedByMafia === healedByDoctor) {
-      gatewayEmitCb(
-        state.roomId,
-        'system_chat',
-        `Мафія намагалась вбити, але Лікар врятував жертву!`,
-      );
-    }
-
-    if (killedByManiac && killedByManiac !== healedByDoctor) {
-      if (killedByManiac === bodyguardTargetId) {
-        gatewayEmitCb(
-          state.roomId,
-          'system_chat',
-          `Маніяк намагався вбити, але Охоронець захистив ціль!`,
-        );
-      } else {
-        victims.add(killedByManiac);
-      }
-    }
-
-    // Deal with Lovers - if one lover dies, the other commits suicide
-    let loversDied = false;
-    victims.forEach((vId) => {
-      const p = state.players.find((pl) => pl.userId === vId);
-      if (p?.role === RoleType.LOVERS) loversDied = true;
-    });
-    if (loversDied) {
-      state.players.forEach((p) => {
-        if (p.role === RoleType.LOVERS) victims.add(p.userId);
-      });
-    }
-
-    if (victims.size > 0) {
-      victims.forEach((vId) => {
-        const victim = state.players.find((p) => p.userId === vId);
-        if (victim) {
-          victim.isAlive = false;
-          gatewayEmitCb(
-            state.roomId,
-            'system_chat',
-            `Вночі було вбито гравця ${victim.username}.`,
-          );
-          this.pushMatchLog(state, `Гравець ${victim.username} помер вночі.`);
-          if (victim.lastWill) {
-            gatewayEmitCb(
-              state.roomId,
-              'system_chat',
-              `Заповіт гравця ${victim.username}:\n"${victim.lastWill}"`,
-            );
-          }
-        }
-      });
-    } else {
-      if (!killedByMafia && !killedByManiac) {
-        gatewayEmitCb(
-          state.roomId,
-          'system_chat',
-          `Ця ніч була спокійною. Ніхто не вбивав.`,
-        );
-        this.pushMatchLog(state, `Вночі ніхто не загинув.`);
-      }
-    }
-
-    state.nightActions.clear();
+    this.nightActionResolution.resolveNightActions(state, gatewayEmitCb);
   }
 
   private async resolveVoting(state: GameState, gatewayEmitCb: Function) {
-    // Anti-AFK Check
-    state.players
-      .filter((p) => p.isAlive)
-      .forEach((p) => {
-        if (!state.votes.has(p.userId)) {
-          p.afkPhasesCount = (p.afkPhasesCount || 0) + 1;
-        } else {
-          p.afkPhasesCount = 0;
-        }
+    const result = await this.votingResolution.resolveVoting(
+      state,
+      gatewayEmitCb,
+    );
 
-        if (p.afkPhasesCount >= 2) {
-          p.isAlive = false;
-          gatewayEmitCb(
-            state.roomId,
-            'system_chat',
-            `Гравець ${p.username} вчинив самогубство через відсутність активності (AFK).`,
-          );
-        }
-      });
-
-    // If everyone died from AFK, or win condition met, stop voting resolution
-    if (state.players.filter((p) => p.isAlive).length <= 0) {
-      return;
-    }
-
-    if (state.votes.size === 0) {
-      gatewayEmitCb(
-        state.roomId,
-        'system_chat',
-        `Ніхто не проголосував. Нікого не страчено.`,
+    if (result.jesterWon && result.jesterId) {
+      const room = await this.getRoom(state.roomId);
+      await this.matchRecording.awardStats(
+        room?.type,
+        state.players,
+        'БЛАЗЕНЬ',
+        state.logs,
+        result.jesterId,
+        state.dayCount,
       );
-      return;
-    }
-
-    const voteCounts: Record<string, number> = {};
-    for (const [voterId, targetId] of state.votes.entries()) {
-      const voter = state.players.find((p) => p.userId === voterId);
-      const target =
-        targetId === 'SKIP'
-          ? 'пропуск'
-          : state.players.find((p) => p.userId === targetId)?.username ||
-            targetId;
-      if (voter) {
-        this.pushMatchLog(
-          state,
-          `${voter.username} проголосував за ${target}.`,
-        );
-      }
-      let power = 1;
-      if (voter?.role === RoleType.MAYOR) power = 2;
-      if (voter?.role === RoleType.JUDGE) power = 3;
-      voteCounts[targetId] = (voteCounts[targetId] || 0) + power;
-    }
-
-    let maxVotes = 0;
-    let executedId: string | null = null;
-    let tie = false;
-
-    for (const [targetId, votes] of Object.entries(voteCounts)) {
-      if (votes > maxVotes) {
-        maxVotes = votes;
-        executedId = targetId;
-        tie = false;
-      } else if (votes === maxVotes) {
-        tie = true;
-      }
-    }
-
-    if (!tie && executedId && executedId !== 'SKIP') {
-      const mayor = state.players.find(
-        (p) => p.role === RoleType.MAYOR && p.isAlive,
-      );
-      if (mayor && !state.mayorVetoUsed) {
-        state.pendingExecutionId = executedId;
-        state.phase = GamePhase.MAYOR_VETO;
-        gatewayEmitCb(state.roomId, 'veto_available', { targetId: executedId });
-      } else {
-        await this.executeVictim(state, gatewayEmitCb, executedId);
-      }
-    } else if (!tie && executedId === 'SKIP') {
-      gatewayEmitCb(
-        state.roomId,
-        'system_chat',
-        `Більшість проголосувала за пропуск голосування. Нікого не страчено.`,
-      );
-      this.pushMatchLog(
-        state,
-        `Більшість проголосувала за пропуск голосування.`,
-      );
-    } else {
-      gatewayEmitCb(
-        state.roomId,
-        'system_chat',
-        `Голоси розділилися порівну. Нікого не страчено.`,
-      );
-      this.pushMatchLog(
-        state,
-        `Голоси розділилися порівну. Нікого не страчено.`,
-      );
-    }
-
-    state.votes.clear();
-  }
-
-  private async executeVictim(
-    state: GameState,
-    gatewayEmitCb: Function,
-    executedId: string,
-  ) {
-    const victim = state.players.find((p) => p.userId === executedId);
-    if (victim) {
-      victim.isAlive = false;
-
-      if (victim.role === RoleType.JESTER) {
-        gatewayEmitCb(
-          state.roomId,
-          'system_chat',
-          `Гравець ${victim.username} виявився Блазнем! Він здобув одноосібну ПЕРЕМОГУ!`,
-        );
-        this.pushMatchLog(
-          state,
-          `Страчено гравця ${victim.username}. Він виявився Блазнем і переміг!`,
-        );
-        state.phase = GamePhase.END_GAME;
-        gatewayEmitCb(state.roomId, 'phase_changed', GamePhase.END_GAME);
-        await this.awardStats(
-          state.roomId,
-          state.players,
-          'БЛАЗЕНЬ',
-          state.logs,
-          victim.userId,
-          state.dayCount,
-        );
-        this.scheduleReturnToLobby(state, gatewayEmitCb);
-        return;
-      }
-
-      gatewayEmitCb(
-        state.roomId,
-        'system_chat',
-        `За результатами голосування убито ${victim.username}. Його роль: ${victim.role}.`,
-      );
-      this.pushMatchLog(
-        state,
-        `За результатами голосування страчено ${victim.username} (${victim.role}).`,
-      );
-
-      if (victim.lastWill) {
-        gatewayEmitCb(
-          state.roomId,
-          'system_chat',
-          `Заповіт гравця ${victim.username}:\n"${victim.lastWill}"`,
-        );
-      }
-
-      // Check lovers
-      if (victim.role === RoleType.LOVERS) {
-        state.players.forEach((p) => {
-          if (p.role === RoleType.LOVERS && p.isAlive) {
-            p.isAlive = false;
-            gatewayEmitCb(
-              state.roomId,
-              'system_chat',
-              `Гравець ${p.username} не витримав втрати кохання і вчинив самогубство!`,
-            );
-          }
-        });
-      }
+      this.scheduleReturnToLobby(state, gatewayEmitCb);
     }
   }
 
@@ -1168,50 +719,29 @@ export class GameService implements OnModuleInit {
     gatewayEmitCb: Function,
   ): Promise<boolean> {
     const state = await this.getGameState(roomId);
-    if (!state || state.phase !== GamePhase.MAYOR_VETO) return false;
+    if (!state) return false;
 
-    const player = state.players.find((p) => p.userId === userId);
-    if (
-      player?.role !== RoleType.MAYOR ||
-      !player.isAlive ||
-      state.mayorVetoUsed
-    )
-      return false;
-
-    state.mayorVetoUsed = true;
-    const victim = state.players.find(
-      (p) => p.userId === state.pendingExecutionId,
+    const success = this.votingResolution.handleMayorVeto(
+      state,
+      userId,
+      gatewayEmitCb,
     );
 
-    gatewayEmitCb(
-      state.roomId,
-      'system_chat',
-      `Мер наклав ВЕТО на страту гравця ${victim?.username}! Його звільнено.`,
-    );
-    this.pushMatchLog(state, `Мер скасував страту гравця ${victim?.username}.`);
-
-    state.pendingExecutionId = null;
-
-    // Skip to next phase (Night) by fast-forwarding the timer
-    state.timerMs = 1000;
-    await this.saveGameState(state);
-    return true;
+    if (success) {
+      // Skip to next phase (Night) by fast-forwarding the timer
+      state.timerMs = 1000;
+      await this.saveGameState(state);
+    }
+    return success;
   }
 
   private async checkWinCondition(
     state: GameState,
     gatewayEmitCb: Function,
   ): Promise<boolean> {
-    const alive = state.players.filter((p) => p.isAlive);
-    const mafias = alive.filter(
-      (p) => p.role === RoleType.MAFIA || p.role === RoleType.DON,
-    ).length;
-    const maniacs = alive.filter(
-      (p) => p.role === RoleType.SERIAL_KILLER,
-    ).length;
-    const civilians = alive.length - mafias - maniacs;
+    const winner = this.winCondition.determineWinner(state);
 
-    if (alive.length === 0) {
+    if (winner === 'DRAW') {
       state.phase = GamePhase.END_GAME;
       gatewayEmitCb(
         state.roomId,
@@ -1223,13 +753,6 @@ export class GameService implements OnModuleInit {
       return true;
     }
 
-    let winner: string | null = null;
-
-    if (mafias === 0 && maniacs === 0) winner = 'МИРНІ';
-    else if (mafias > 0 && mafias >= civilians + maniacs) winner = 'МАФІЯ';
-    else if (maniacs > 0 && alive.length <= 2 && mafias === 0)
-      winner = 'МАНІЯК';
-
     if (winner) {
       state.phase = GamePhase.END_GAME;
       gatewayEmitCb(
@@ -1239,9 +762,9 @@ export class GameService implements OnModuleInit {
       );
       gatewayEmitCb(state.roomId, 'phase_changed', GamePhase.END_GAME);
 
-      // Await stats update here
-      await this.awardStats(
-        state.roomId,
+      const room = await this.getRoom(state.roomId);
+      await this.matchRecording.awardStats(
+        room?.type,
         state.players,
         winner,
         state.logs,
@@ -1249,25 +772,7 @@ export class GameService implements OnModuleInit {
         state.dayCount,
       );
 
-      // Process user bets
-      for (const [userId, bet] of state.bets.entries()) {
-        if (bet.faction === winner) {
-          const winnings = bet.amount * 2;
-          await this.prisma.wallet.update({
-            where: { userId },
-            data: { soft: { increment: winnings } },
-          });
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message: `Ваша ставка виграла! Ви отримали ${winnings} монет.`,
-          });
-        } else {
-          gatewayEmitCb(state.roomId, 'private_action_result', {
-            userId,
-            message: `Ваша ставка програла (${bet.amount} монет).`,
-          });
-        }
-      }
+      await this.spectatorBet.resolveBets(state, winner, gatewayEmitCb);
 
       this.scheduleReturnToLobby(state, gatewayEmitCb);
       return true;
@@ -1298,255 +803,15 @@ export class GameService implements OnModuleInit {
     jesterId?: string,
     dayCount?: number,
   ) {
-    try {
-      const room = await this.getRoom(roomId);
-      const isRanked = room?.type === 'RANKED';
-
-      const matchData = await this.prisma.match.create({
-        data: {
-          winner,
-          duration: dayCount || 1,
-          logs: logs ? JSON.stringify(logs) : '[]',
-          participants: {
-            create: await Promise.all(
-              players
-                .filter((p) => !p.isSpectator && !p.isBot)
-                .map(async (p) => {
-                  const isMafia =
-                    p.role === RoleType.MAFIA || p.role === RoleType.DON;
-                  let won = false;
-                  if (winner === 'МАФІЯ' && isMafia) won = true;
-                  if (
-                    winner === 'МИРНІ' &&
-                    !isMafia &&
-                    p.role !== RoleType.SERIAL_KILLER &&
-                    p.role !== RoleType.JESTER
-                  )
-                    won = true;
-                  if (winner === 'МАНІЯК' && p.role === RoleType.SERIAL_KILLER)
-                    won = true;
-                  if (winner === 'БЛАЗЕНЬ' && p.userId === jesterId) won = true;
-
-                  const profile = await this.prisma.profile.findUnique({
-                    where: { userId: p.userId },
-                  });
-                  return {
-                    profileId: profile?.id || '',
-                    role: p.role?.toString() || 'ГЛЯДАЧ',
-                    won,
-                  };
-                }),
-            ).then((results) => results.filter((r) => r.profileId !== '')),
-          },
-        },
-      });
-
-      for (const p of players) {
-        const isMafia = p.role === RoleType.MAFIA || p.role === RoleType.DON;
-        let won = false;
-
-        if (winner === 'МАФІЯ' && isMafia) won = true;
-        if (
-          winner === 'МИРНІ' &&
-          !isMafia &&
-          p.role !== RoleType.SERIAL_KILLER &&
-          p.role !== RoleType.JESTER
-        )
-          won = true;
-        if (winner === 'МАНІЯК' && p.role === RoleType.SERIAL_KILLER)
-          won = true;
-        if (winner === 'БЛАЗЕНЬ' && p.userId === jesterId) won = true;
-
-        try {
-          if (p.isSpectator || p.isBot) continue;
-
-          const profile = await this.prisma.profile.findUnique({
-            where: { userId: p.userId },
-          });
-          if (profile) {
-            const xpEarned = won ? 100 : 25;
-            let newXp = profile.xp + xpEarned;
-            let newLevel = profile.level;
-
-            while (newXp >= newLevel * 500) {
-              newXp -= newLevel * 500;
-              newLevel++;
-            }
-            const now = new Date();
-            const todayStart = new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate(),
-            );
-
-            const activeQuests = await this.prisma.userQuest.findMany({
-              where: {
-                profileId: profile.id,
-                completed: false,
-              },
-            });
-
-            const nowTime = new Date();
-            const todayStart2 = new Date(
-              nowTime.getFullYear(),
-              nowTime.getMonth(),
-              nowTime.getDate(),
-            );
-
-            // Fallback: Date filtering in memory if createdAt does not exist on UserQuest schema
-            const filteredQuests = activeQuests.filter((uq: any) => {
-              if (!uq.createdAt) return true;
-              return new Date(uq.createdAt) >= todayStart2;
-            });
-
-            for (const uq of filteredQuests) {
-              const quest = await this.prisma.quest.findUnique({
-                where: { id: uq.questId },
-              });
-              if (!quest) continue;
-              if (uq.progress >= quest.requirement) continue;
-
-              let progressed = false;
-              const qCode = quest.code;
-
-              if (qCode === 'PLAY_3_MATCHES') {
-                progressed = true;
-              }
-              if (qCode === 'WIN_1_MATCH' && won) {
-                progressed = true;
-              }
-              if (qCode === 'WIN_AS_MAFIA_1' && won && isMafia) {
-                progressed = true;
-              }
-              if (
-                qCode === 'PLAY_AS_CITIZEN_2' &&
-                p.role === RoleType.CITIZEN
-              ) {
-                progressed = true;
-              }
-
-              if (progressed) {
-                await this.prisma.userQuest.update({
-                  where: { id: uq.id },
-                  data: { progress: { increment: 1 } },
-                });
-              }
-            }
-
-            const newWinStreak = won ? profile.winStreak + 1 : 0;
-            const newMaxWinStreak = Math.max(
-              profile.maxWinStreak,
-              newWinStreak,
-            );
-            const newTotalDuration = profile.totalDuration + (dayCount || 1);
-            const newSurvivedMatches =
-              profile.survivedMatches + (p.isAlive ? 1 : 0);
-
-            const updateData: any = {
-              matches: { increment: 1 },
-              wins: { increment: won ? 1 : 0 },
-              losses: { increment: won ? 0 : 1 },
-              xp: newXp,
-              level: newLevel,
-              winStreak: newWinStreak,
-              maxWinStreak: newMaxWinStreak,
-              totalDuration: newTotalDuration,
-              survivedMatches: newSurvivedMatches,
-            };
-
-            if (isRanked) {
-              updateData.mmr = { increment: won ? 25 : -25 };
-            }
-
-            await this.prisma.profile.update({
-              where: { userId: p.userId },
-              data: updateData,
-            });
-
-            const coinsEarned = won ? 50 : 10;
-            await this.prisma.wallet.update({
-              where: { userId: p.userId },
-              data: { soft: { increment: coinsEarned } },
-            });
-
-            const newAchievements = [];
-            if (won && (p.role === RoleType.MAFIA || p.role === RoleType.DON)) {
-              newAchievements.push({
-                profileId: profile.id,
-                type: 'MAFIA_WINNER',
-              });
-            }
-            if (won && p.role === RoleType.JESTER) {
-              newAchievements.push({
-                profileId: profile.id,
-                type: 'JESTER_JOKE',
-              });
-            }
-            if (profile.wins + (won ? 1 : 0) === 10) {
-              newAchievements.push({ profileId: profile.id, type: 'VETERAN' });
-            }
-            if (profile.matches + 1 === 1) {
-              newAchievements.push({
-                profileId: profile.id,
-                type: 'FIRST_BLOOD',
-              });
-            }
-
-            if (newAchievements.length > 0) {
-              for (const ach of newAchievements) {
-                const exists = await this.prisma.achievement.findFirst({
-                  where: { profileId: profile.id, type: ach.type },
-                });
-                if (!exists) {
-                  await this.prisma.achievement.create({ data: ach });
-                }
-              }
-            }
-
-            // Clan War integration: winning players earn points for their clan
-            if (won && profile.clanId) {
-              try {
-                const activeWar = await this.prisma.clanWar.findFirst({
-                  where: {
-                    status: 'ACTIVE',
-                    OR: [
-                      { challengerId: profile.clanId },
-                      { targetId: profile.clanId },
-                    ],
-                  },
-                });
-                if (activeWar) {
-                  const warPoints = 10;
-                  await this.prisma.clanWarContribution.create({
-                    data: {
-                      warId: activeWar.id,
-                      userId: p.userId,
-                      clanId: profile.clanId,
-                      points: warPoints,
-                      source: 'GAME_WIN',
-                    },
-                  });
-                  const isChallenger =
-                    activeWar.challengerId === profile.clanId;
-                  await this.prisma.clanWar.update({
-                    where: { id: activeWar.id },
-                    data: isChallenger
-                      ? { challengerScore: { increment: warPoints } }
-                      : { targetScore: { increment: warPoints } },
-                  });
-                }
-              } catch (warErr) {
-                console.error('Clan war points error', warErr);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Failed to update stats', e);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to create match record', e);
-    }
+    const room = await this.getRoom(roomId);
+    await this.matchRecording.awardStats(
+      room?.type,
+      players,
+      winner,
+      logs,
+      jesterId,
+      dayCount,
+    );
   }
 
   async handleNightAction(

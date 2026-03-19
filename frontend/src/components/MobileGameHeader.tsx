@@ -9,6 +9,8 @@ interface MobileGameHeaderProps {
     roleColor: string;
     isGameOver: boolean;
     isSpectator: boolean;
+    alivePlayers?: number;
+    totalPlayers?: number;
     isMuted?: boolean;
     onSoundClick?: () => void;
 }
@@ -21,6 +23,8 @@ export function MobileGameHeader({
     roleColor,
     isGameOver,
     isSpectator,
+    alivePlayers,
+    totalPlayers,
     isMuted,
     onSoundClick,
 }: MobileGameHeaderProps) {
@@ -36,6 +40,11 @@ export function MobileGameHeader({
                 <span className="text-[10px] font-bold text-gray-400 bg-[#1a1a1a] px-1.5 py-0.5 rounded truncate">
                     {phaseLabel}
                 </span>
+                {alivePlayers != null && totalPlayers != null && (
+                    <span className="text-[10px] font-mono text-gray-500 shrink-0">
+                        {alivePlayers}/{totalPlayers}
+                    </span>
+                )}
             </div>
 
             {/* Center: Role */}
@@ -57,8 +66,8 @@ export function MobileGameHeader({
                 {onSoundClick && (
                     <button
                         onClick={onSoundClick}
-                        className="p-1.5 rounded-full bg-gray-800/50 active:bg-gray-700 transition"
-                        style={{ minWidth: 32, minHeight: 32 }}
+                        className="p-2 rounded-full bg-gray-800/50 active:bg-gray-700 transition"
+                        style={{ minWidth: 40, minHeight: 40 }}
                     >
                         {isMuted ? <VolumeX size={14} className="text-gray-500" /> : <Volume2 size={14} className="text-gray-300" />}
                     </button>
@@ -71,6 +80,7 @@ export function MobileGameHeader({
                         initial={{ scale: 1.2, opacity: 0.7 }}
                         animate={{ scale: 1, opacity: 1 }}
                         className={`text-lg font-mono font-bold ${
+                            timerSeconds && timerSeconds <= 5 ? 'text-red-500 animate-pulse' :
                             timerSeconds && timerSeconds <= 10 ? 'text-red-500' : 'text-mafia-red'
                         }`}
                     >

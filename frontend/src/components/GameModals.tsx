@@ -10,7 +10,7 @@ interface WhisperModalProps {
     isOpen: boolean;
     targetUsername: string;
     onClose: () => void;
-    onSend: (message: string) => void;
+    onSend: (message: string) => Promise<{success: boolean; error?: string}> | void;
 }
 
 export function WhisperModal({ isOpen, targetUsername, onClose, onSend }: WhisperModalProps) {
@@ -18,10 +18,14 @@ export function WhisperModal({ isOpen, targetUsername, onClose, onSend }: Whispe
     const [isSending, setIsSending] = useState(false);
     const [sent, setSent] = useState(false);
 
-    const handleSend = useCallback(() => {
+    const handleSend = useCallback(async () => {
         if (!message.trim() || isSending) return;
         setIsSending(true);
-        onSend(message.trim());
+        const res = await onSend(message.trim()) as any;
+        if (res?.success === false) {
+            setIsSending(false);
+            return;
+        }
         setMessage('');
         setSent(true);
         // Brief success feedback then close

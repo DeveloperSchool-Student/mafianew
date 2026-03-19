@@ -1,34 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { ArrowLeft, Clock, Trophy } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface MatchParticipant {
-    profile: {
-        user: {
-            username: string;
-        };
-    };
-    role: string;
-    won: boolean;
-}
-
-interface MatchLog {
-    day: number;
-    phase: string;
-    text: string;
-}
-
-interface MatchDetails {
-    id: string;
-    createdAt: string;
-    winner: string;
-    duration: number;
-    participants: MatchParticipant[];
-    logs: MatchLog[];
-}
+import { fetchMatchDetails } from '../services/usersApi';
+import type { MatchDetails } from '../services/usersApi';
 
 export function MatchReplay() {
     const { id } = useParams<{ id: string }>();
@@ -38,20 +12,19 @@ export function MatchReplay() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchMatch = async () => {
+        const load = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const res = await axios.get(`${API_URL}/matches/${id}`, {
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
-                setMatch(res.data);
-            } catch (err: any) {
-                setError(err.response?.data?.message || 'Помилка при завантаженні матчу');
+                const token = localStorage.getItem('mafia_token') || undefined;
+                const data = await fetchMatchDetails(id!, token);
+                setMatch(data);
+            } catch (err: unknown) {
+                const axiosErr = err as { response?: { data?: { message?: string } } };
+                setError(axiosErr.response?.data?.message || 'Помилка при завантаженні матчу');
             } finally {
                 setLoading(false);
             }
         };
-        fetchMatch();
+        load();
     }, [id]);
 
     if (loading) {

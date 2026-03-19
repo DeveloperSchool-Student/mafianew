@@ -62,7 +62,7 @@ export function Profile() {
 
             profileApi.fetchQuests(user.token)
                 .then(data => setQuests(data))
-                .catch(() => {}); // quests are non-critical
+                .catch(e => { console.warn('Quests load failed, non-critical:', e); });
         } else {
             profileApi.fetchUserProfile(user.token, routeUserId!)
                 .then(data => setProfile(data))
@@ -284,7 +284,6 @@ export function Profile() {
                                     {t('common.save')}
                                 </button>
                             </div>
-                            {avatarError && <p className="text-red-400 text-xs mt-2">{avatarError}</p>}
                         </form>
                     )}
 

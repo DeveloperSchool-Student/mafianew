@@ -1,4 +1,6 @@
-export function getPhaseLabel(phase: string | null, t: any): string {
+import type { TFunction } from 'i18next';
+
+export function getPhaseLabel(phase: string | null, t: TFunction): string {
     switch (phase) {
         case 'ROLE_DISTRIBUTION': return t('game.phase_ROLE_DISTRIBUTION', 'РОЗПОДІЛ РОЛЕЙ');
         case 'NIGHT': return t('game.phase_NIGHT');
@@ -10,7 +12,7 @@ export function getPhaseLabel(phase: string | null, t: any): string {
     }
 }
 
-export function getRoleLabel(role: string | null, t: any): string {
+export function getRoleLabel(role: string | null, t: TFunction): string {
     switch (role) {
         case 'MAFIA': return t('game.role_MAFIA');
         case 'DON': return t('game.role_DON');

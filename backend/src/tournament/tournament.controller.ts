@@ -7,10 +7,15 @@ import {
   Body,
   Param,
   Query,
-  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { TournamentService } from './tournament.service';
+import {
+  CreateTournamentDto,
+  MatchResultDto,
+  EliminatePlayerDto,
+  EndTournamentDto,
+} from './dto/tournament.dto';
 
 @Controller('tournaments')
 @UseGuards(AuthGuard('jwt'))
@@ -28,17 +33,7 @@ export class TournamentController {
   }
 
   @Post()
-  create(
-    @Request() req: any,
-    @Body()
-    body: {
-      name: string;
-      maxParticipants?: number;
-      prizePool?: number;
-      entryFee?: number;
-      rules?: string;
-    },
-  ) {
+  create(@Request() req: any, @Body() body: CreateTournamentDto) {
     return this.tournamentService.createTournament(req.user, body);
   }
 
@@ -65,7 +60,7 @@ export class TournamentController {
   recordMatch(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() body: { winnerId: string; loserId: string },
+    @Body() body: MatchResultDto,
   ) {
     return this.tournamentService.recordMatchResult(req.user, {
       tournamentId: id,
@@ -78,7 +73,7 @@ export class TournamentController {
   eliminate(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() body: { userId: string },
+    @Body() body: EliminatePlayerDto,
   ) {
     return this.tournamentService.eliminatePlayer(req.user, {
       tournamentId: id,
@@ -90,7 +85,7 @@ export class TournamentController {
   end(
     @Request() req: any,
     @Param('id') id: string,
-    @Body() body: { winnerId?: string },
+    @Body() body: EndTournamentDto,
   ) {
     return this.tournamentService.endTournament(req.user, id, body.winnerId);
   }
