@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store';
 import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { Trophy, Users, ArrowLeft, Plus, Play, X, Award, Loader2 } from 'lucide-react';
+import { Trophy, Users, ArrowLeft, Plus, Play, X, Award, Loader2, Check } from 'lucide-react';
 import { CoinIcon } from '../components/CoinIcon';
 import type { Tournament } from '../types/api';
 import { getStaffPower } from '../types/api';
