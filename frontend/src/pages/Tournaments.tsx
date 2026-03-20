@@ -30,11 +30,13 @@ export function Tournaments() {
     const [showEndModal, setShowEndModal] = useState(false);
     const [endWinnerId, setEndWinnerId] = useState('');
 
-    useEffect(() => {
-        if (!user) { navigate('/login'); return; }
-        loadTournaments();
-        loadTournaments();
-    }, [user, navigate, filter]);
+useEffect(() => {
+    if (!user) {
+        navigate('/login');
+        return;
+    }
+    loadTournaments();
+}, [user, navigate, filter]);
 
     const loadTournaments = async () => {
         if (!user) return;
