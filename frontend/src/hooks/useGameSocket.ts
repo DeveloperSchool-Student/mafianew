@@ -69,7 +69,7 @@ if (gameState.phase === 'NIGHT') {
                         const newP = newPlayers?.find((p: Player) => p.userId === oldP.userId);
                         if (oldP.isAlive && newP && !newP.isAlive) {
                             playSound('death.mp3');
-                            audioManager.playShotSound();
+                            audioManager.playShot();
                         }
                     });
                 }
