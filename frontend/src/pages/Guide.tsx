@@ -1,10 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { 
-    BookOpen, 
     Users, 
     Target, 
-    Zap, 
-    Clock, 
+    Zap,  
     ShieldCheck, 
     Skull, 
     Sword, 
