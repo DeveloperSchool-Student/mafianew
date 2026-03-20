@@ -97,7 +97,7 @@ export class AudioManager {
             audio.currentTime = 0;
         }
         
-        audio.play().catch(e => {
+        audio.play().catch(() => {
             // User interaction might be required
             // We silent this because it's expected in many browsers
         });
