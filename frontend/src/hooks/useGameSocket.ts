@@ -22,21 +22,21 @@ export function useGameSocket() {
     // Ambient background sounds using the AudioManager
     useEffect(() => {
         if (!gameState.phase) {
-            audioManager.pauseBgMusic();
-            audioManager.pauseNightSound();
-            return;
-        }
+    audioManager.stopMusic();
+    audioManager.stopNight();
+    return;
+}
 
-        if (gameState.phase === 'NIGHT') {
-            audioManager.pauseBgMusic();
-            audioManager.playNightSound();
-        } else if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') {
-            audioManager.pauseNightSound();
-            audioManager.playBgMusic();
-        } else {
-            audioManager.pauseBgMusic();
-            audioManager.pauseNightSound();
-        }
+if (gameState.phase === 'NIGHT') {
+    audioManager.stopMusic();
+    audioManager.startNight();
+} else if (gameState.phase === 'DAY_DISCUSSION' || gameState.phase === 'DAY_VOTING') {
+    audioManager.stopNight();
+    audioManager.startMusic();
+} else {
+    audioManager.stopMusic();
+    audioManager.stopNight();
+}
     }, [gameState.phase]);
 
     useEffect(() => {
