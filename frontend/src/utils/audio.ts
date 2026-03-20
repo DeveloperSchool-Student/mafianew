@@ -1,25 +1,32 @@
 export class AudioManager {
     private static instance: AudioManager;
-    private bgMusic: HTMLAudioElement;
-    private nightSound: HTMLAudioElement;
-    private shotSound: HTMLAudioElement;
-
-    // Default relative paths - user should place these files in public/sounds
-    private bgMusicPath = '/sounds/bg-music.mp3';
-    private nightSoundPath = '/sounds/night.mp3';
-    private shotSoundPath = '/sounds/shot.mp3';
+    private sounds: Map<string, HTMLAudioElement> = new Map();
+    
+    // Paths for sound assets
+    private soundPaths: Record<string, string> = {
+        'bg-music': '/sounds/bg-music.mp3',
+        'night-ambient': '/sounds/night.mp3',
+        'shot': '/sounds/shot.mp3',
+        'click': '/sounds/click.mp3',
+        'phase-change': '/sounds/phase-change.mp3',
+        'victory': '/sounds/victory.mp3',
+        'defeat': '/sounds/defeat.mp3',
+        'notification': '/sounds/notification.mp3',
+    };
 
     private volume: number = 0.5;
+    private sfxVolume: number = 1.0;
     private isMuted: boolean = false;
 
     private constructor() {
-        this.bgMusic = new Audio(this.bgMusicPath);
-        this.bgMusic.loop = true;
-
-        this.nightSound = new Audio(this.nightSoundPath);
-        this.nightSound.loop = true;
-
-        this.shotSound = new Audio(this.shotSoundPath);
+        // Initialize basic sounds
+        Object.entries(this.soundPaths).forEach(([key, path]) => {
+            const audio = new Audio(path);
+            if (key === 'bg-music' || key === 'night-ambient') {
+                audio.loop = true;
+            }
+            this.sounds.set(key, audio);
+        });
 
         this.loadSettings();
         this.updateVolume();
@@ -47,9 +54,16 @@ export class AudioManager {
 
     private updateVolume() {
         const effectiveVolume = this.isMuted ? 0 : this.volume;
-        this.bgMusic.volume = effectiveVolume * 0.5; // BG music usually quieter
-        this.nightSound.volume = effectiveVolume * 0.7;
-        this.shotSound.volume = effectiveVolume;
+        
+        this.sounds.forEach((audio, key) => {
+            if (key === 'bg-music') {
+                audio.volume = effectiveVolume * 0.4; // 40% of master for music
+            } else if (key === 'night-ambient') {
+                audio.volume = effectiveVolume * 0.6; // 60% for ambient
+            } else {
+                audio.volume = effectiveVolume * this.sfxVolume; // 100% of master for SFX
+            }
+        });
     }
 
     public setVolume(volume: number) {
@@ -72,34 +86,44 @@ export class AudioManager {
         return this.isMuted;
     }
 
-    public playBgMusic() {
-        if (this.bgMusic.paused) {
-            this.bgMusic.play().catch(e => console.warn('Audio play prevented', e));
+    /**
+     * Play a sound by its key defined in soundPaths
+     */
+    public play(key: string, restart = true) {
+        const audio = this.sounds.get(key);
+        if (!audio || this.isMuted) return;
+
+        if (restart) {
+            audio.currentTime = 0;
+        }
+        
+        audio.play().catch(e => {
+            // User interaction might be required
+            // We silent this because it's expected in many browsers
+        });
+    }
+
+    public stop(key: string) {
+        const audio = this.sounds.get(key);
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
         }
     }
 
-    public pauseBgMusic() {
-        if (!this.bgMusic.paused) {
-            this.bgMusic.pause();
-        }
-    }
+    // Sugar methods for common actions
+    public playClick() { this.play('click'); }
+    public playShot() { this.play('shot'); }
+    public playPhaseChange() { this.play('phase-change'); }
+    public playNotification() { this.play('notification'); }
+    public playVictory() { this.play('victory'); }
+    public playDefeat() { this.play('defeat'); }
 
-    public playNightSound() {
-        if (this.nightSound.paused) {
-            this.nightSound.play().catch(e => console.warn('Audio play prevented', e));
-        }
-    }
+    public startMusic() { this.play('bg-music', false); }
+    public stopMusic() { this.stop('bg-music'); }
 
-    public pauseNightSound() {
-        if (!this.nightSound.paused) {
-            this.nightSound.pause();
-        }
-    }
-
-    public playShotSound() {
-        this.shotSound.currentTime = 0;
-        this.shotSound.play().catch(e => console.warn('Audio play prevented', e));
-    }
+    public startNight() { this.play('night-ambient', false); }
+    public stopNight() { this.stop('night-ambient'); }
 }
 
 export const audioManager = AudioManager.getInstance();

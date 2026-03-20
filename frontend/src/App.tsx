@@ -3,30 +3,47 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from './store'
 import { useNotificationStore } from './store/notificationStore'
 import { Shield } from 'lucide-react'
+import { audioManager } from './utils/audio'
 
 function App() {
   const user = useAppStore(state => state.user)
-  const socket = useAppStore(state => state.socket)
   const isInitializing = useAppStore(state => state.isInitializing)
   const fetchCurrentUser = useAppStore(state => state.fetchCurrentUser)
   const theme = useAppStore(state => state.theme)
+  const socket = useAppStore(state => state.socket)
   const navigate = useNavigate()
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-  }, []);
+  }, [theme]);
 
   useEffect(() => {
     fetchCurrentUser();
   }, [fetchCurrentUser]);
 
+  // Global click sound handler
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"]')) {
+        audioManager.playClick();
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   useEffect(() => {
     if (isInitializing) return;
 
     if (user) {
-      navigate('/lobby')
+      if (window.location.pathname === '/login' || window.location.pathname === '/register' || window.location.pathname === '/') {
+          navigate('/lobby');
+      }
     } else {
-      navigate('/login')
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/register' && !window.location.pathname.startsWith('/reset-password')) {
+          navigate('/login');
+      }
     }
   }, [user, navigate, isInitializing])
 
@@ -34,6 +51,7 @@ function App() {
     if (!socket) return;
 
     const handleNotification = (data: { title: string; message: string; type?: string }) => {
+      audioManager.playNotification();
       useNotificationStore.getState().addNotification({
         title: data.title,
         message: data.message,

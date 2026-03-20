@@ -42,3 +42,7 @@ export async function updateAvatar(token: string, avatarUrl: string): Promise<vo
 export async function submitAppeal(token: string, type: 'UNBAN' | 'UNMUTE', reason: string): Promise<void> {
     await axios.post(`${API_URL}/admin/appeals/submit`, { type, reason }, auth(token));
 }
+export async function searchUsersByUsername(token: string, username: string): Promise<{ id: string; username: string }> {
+    const res = await axios.get(`${API_URL}/users/find/${username}`, auth(token));
+    return res.data;
+}

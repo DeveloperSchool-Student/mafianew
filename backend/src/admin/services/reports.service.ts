@@ -31,6 +31,20 @@ export class ReportsService {
       throw new BadRequestException('Не можна скаржитися на самого себе.');
     }
 
+    const existingReport = await this.prisma.report.findFirst({
+      where: {
+        reporterId,
+        targetId: target.id,
+        status: 'PENDING',
+      },
+    });
+
+    if (existingReport) {
+      throw new BadRequestException(
+        'Ви вже подали скаргу на цього гравця, вона ще на розгляді.',
+      );
+    }
+
     return this.prisma.report.create({
       data: {
         reporterId,

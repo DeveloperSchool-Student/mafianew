@@ -197,6 +197,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       );
 
       client.join(activeGameRoomId);
+      const room = await this.gameService.getRoom(activeGameRoomId);
+      if (room) {
+        client.emit('room_updated', room);
+      }
       const filteredState = await this.gameService.getFilteredStateForUser(
         activeGameRoomId,
         userId,
@@ -362,20 +366,19 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     }
   }
 
-  private broadcastGameState(roomId: string) {
-    this.server
-      .in(roomId)
-      .fetchSockets()
-      .then((sockets) => {
-        sockets.forEach((s) => {
-          const userId = s.data.user.sub;
-          const filteredState = this.gameService.getFilteredStateForUser(
-            roomId,
-            userId,
-          );
-          s.emit('game_state_update', filteredState);
-        });
-      });
+  private async broadcastGameState(roomId: string) {
+    const sockets = await this.server.in(roomId).fetchSockets();
+    for (const s of sockets) {
+      const userId = s.data?.user?.sub;
+      if (!userId) continue;
+      const filteredState = await this.gameService.getFilteredStateForUser(
+        roomId,
+        userId,
+      );
+      if (filteredState) {
+        s.emit('game_state_update', filteredState);
+      }
+    }
   }
 
   @SubscribeMessage('start_game')
@@ -488,7 +491,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     if (!state) return;
     const player = state.players.find((p) => p.userId === client.data.user.sub);
     if (player && player.isAlive) {
-      player.lastWill = sanitize(data.lastWill, 150);
+      player.lastWill = sanitize(data.lastWill, 500);
       await this.gameService.saveGameState(state);
       client.emit('system_chat', 'Заповіт збережено.');
     }

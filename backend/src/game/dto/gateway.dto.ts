@@ -44,12 +44,82 @@ export class ReadyDto {
   isReady!: boolean;
 }
 
+export class RoomSettingsDto {
+  @IsOptional()
+  @IsNumber()
+  dayTimerMs?: number;
+
+  @IsOptional()
+  @IsNumber()
+  nightTimerMs?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enableSerialKiller?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableEscort?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableJester?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableLawyer?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableBodyguard?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableTracker?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableInformer?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableMayor?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableJudge?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableBomber?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableTrapper?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableSilencer?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableLovers?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableWhore?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableJournalist?: boolean;
+}
+
 export class UpdateRoomSettingsDto {
   @IsString()
   roomId!: string;
 
   @IsOptional()
-  settings?: any;
+  settings?: RoomSettingsDto;
 }
 
 export class NightActionDto {
@@ -116,6 +186,7 @@ export class AdminActionDto {
 export class ChatMessageDto {
   @IsString()
   @IsOptional()
+  @MaxLength(50)
   roomId?: string;
 
   @IsString()

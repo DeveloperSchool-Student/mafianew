@@ -98,30 +98,36 @@ export function PlayerGrid({ handleAction, roleLabel, journalistSelectedTargets,
                                 style={{ minHeight: 56 }}
                             >
                                 <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-1/2 overflow-hidden">
-                                    <div className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${p.isAlive ? 'bg-gray-800' : 'bg-red-900/40 text-red-500 line-through'}`}>
+                                    <div className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-sm relative transition-all ${p.isAlive ? 'bg-gray-800 shadow-inner group-hover:bg-gray-700' : 'bg-red-900/40 text-red-500 line-through grayscale border border-red-900/50'}`}>
                                         {idx + 1}
+                                        {/* My Targeting Indicator */}
+                                        {p.isAlive && ((gameState.phase === 'DAY_VOTING' && gameState.votes?.some((v: Vote) => v.voterId === user?.id && v.targetId === p.userId)) || (gameState.phase === 'NIGHT' && hasActedNight && (journalistSelectedTargets?.includes(p.userId)))) && (
+                                            <div
+                                                className="absolute -top-1 -right-1 bg-mafia-red w-4 h-4 rounded-full border border-white flex items-center justify-center text-[10px] shadow-[0_0_10px_#cc0000]"
+                                            >
+                                                🎯
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex flex-col min-w-0">
-                                        <span className={`font-medium truncate text-base ${!p.isAlive && !p.isSpectator && 'line-through text-red-900'} ${p.isSpectator && 'text-gray-500'}`}
+                                        <span className={`font-bold truncate text-base ${!p.isAlive && !p.isSpectator && 'line-through text-red-900 opacity-60'} ${p.isSpectator && 'text-gray-500 italic'}`}
                                             style={p.staffRoleColor ? { color: p.staffRoleColor } : undefined}
                                         >
                                             {p.staffRoleTitle && p.staffRoleColor && (
                                                 <span
-                                                    className="text-[9px] font-bold px-1 py-0.5 rounded mr-1.5 align-middle"
+                                                    className="text-[9px] font-bold px-1 py-0.5 rounded mr-1.5 align-middle border border-current shadow-sm"
                                                     style={{
                                                         color: p.staffRoleColor,
-                                                        backgroundColor: p.staffRoleColor + '22',
-                                                        border: `1px solid ${p.staffRoleColor}55`,
+                                                        backgroundColor: p.staffRoleColor + '33',
                                                     }}
                                                 >
                                                     {p.staffRoleTitle}
                                                 </span>
                                             )}
-                                            {p.username} {p.userId === user?.id && '(Ви)'}
-                                            {p.isSpectator && <span className="ml-2 text-xs italic opacity-70">(Глядач)</span>}
+                                            {p.username} {p.userId === user?.id && <span className="text-gray-500 lowercase font-normal italic ml-1">(Ви)</span>}
                                         </span>
-                                        {p.isOnline === false && <span className="text-[10px] text-orange-500 font-bold animate-pulse leading-none">🔌 Відключився</span>}
-                                        {p.isKicked && <span className="text-[10px] text-red-400 font-bold leading-none">🚫 Вигнано</span>}
+                                        {p.isOnline === false && <span className="text-[10px] text-orange-500 font-bold animate-pulse leading-none flex items-center gap-1 mt-1">🔌 Офлайн</span>}
+                                        {p.isKicked && <span className="text-[10px] text-red-400 font-bold leading-none flex items-center gap-1 mt-1">🚫 Вигнано</span>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 self-start sm:self-auto overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 flex-wrap">

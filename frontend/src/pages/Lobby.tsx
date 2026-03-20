@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../store';
 import { useNotificationStore } from '../store/notificationStore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -256,7 +257,7 @@ export function Lobby() {
     };
 
     const isHost = user?.id === gameState.hostId;
-    const allReady = gameState.players.length >= 4 && gameState.players.every(p => p.isReady);
+    const allReady = gameState.players.length >= 5 && gameState.players.every(p => p.isReady);
 
     /* Navigation buttons for top bar */
     const navButtons = [
@@ -490,86 +491,143 @@ export function Lobby() {
                 {error && <div className="bg-red-900/50 border border-red-500 text-red-100 p-3 rounded mb-6 text-sm text-center">{error}</div>}
 
                 {!gameState.roomId && !isSearchingOnline ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 auto-rows-fr">
-                        {/* Create Room */}
-                        <div className="bg-mafia-gray rounded-xl p-6 sm:p-8 border border-gray-800 flex flex-col items-center justify-center text-center hover:border-mafia-red/50 transition-colors h-full">
-                            <Plus size={40} className="text-mafia-red mb-3 sm:mb-4" />
-                            <h3 className="text-lg sm:text-xl font-bold mb-2">{t('lobby.create_room')}</h3>
-                            <p className="text-gray-500 text-xs sm:text-sm mb-4 sm:mb-6">{t('lobby.create_room_desc')}</p>
-
-                            <select
-                                value={createRoomType}
-                                onChange={e => setCreateRoomType(e.target.value as 'CASUAL' | 'RANKED')}
-                                className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-2 text-white mb-3 text-sm focus:border-gray-500 outline-none"
-                            >
-                                <option value="CASUAL">🟢 CASUAL (Без MMR)</option>
-                                <option value="RANKED">🔴 RANKED (±25 MMR)</option>
-                            </select>
-
-                            <button onClick={handleCreate} className="w-full bg-mafia-red hover:bg-red-700 text-white font-bold py-3 px-4 rounded transition-all shadow-[0_0_10px_rgba(204,0,0,0.3)] uppercase text-sm">
-                                {t('lobby.create_room')}
-                            </button>
+                    <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Play Online Matchmaking (Main focus) */}
+                        <div
+                            onClick={handleJoinOnline}
+                            className="relative group overflow-hidden rounded-2xl border-2 border-green-500/30 hover:border-green-400 transition-all cursor-pointer h-80 sm:h-96 md:col-span-2 shadow-[0_0_20px_rgba(34,197,94,0.1)]"
+                        >
+                            <img
+                                src="/assets/radar_bg.png"
+                                alt="Online Matchmaking"
+                                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-60"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent flex flex-col items-center justify-end p-8 text-center">
+                                <Globe size={48} className="text-green-400 mb-4 animate-pulse" />
+                                <h3 className="text-2xl sm:text-4xl font-black mb-2 uppercase tracking-tighter">{t('lobby.online')}</h3>
+                                <p className="text-gray-300 text-sm sm:text-base max-w-md">{t('lobby.online_desc')}</p>
+                                <div className="mt-6 bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-12 rounded-full transition-all uppercase tracking-widest shadow-lg active:scale-95">
+                                    {t('lobby.online')}
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Join Room */}
-                        <div className="bg-mafia-gray rounded-xl p-6 sm:p-8 border border-gray-800 flex flex-col items-center justify-center text-center hover:border-mafia-red/50 transition-colors h-full">
-                            <Users size={40} className="text-gray-400 mb-3 sm:mb-4" />
-                            <h3 className="text-lg sm:text-xl font-bold mb-2">{t('lobby.join')}</h3>
-                            <p className="text-gray-500 text-xs sm:text-sm mb-4 sm:mb-6">{t('lobby.join_desc')}</p>
-                            <div className="flex flex-col w-full gap-3 overflow-hidden">
-                                <input
-                                    type="text"
-                                    value={inputRoomId}
-                                    onChange={e => setInputRoomId(e.target.value)}
-                                    placeholder={t('lobby.join_code_placeholder')}
-                                    maxLength={6}
-                                    className="w-full bg-[#1a1a1a] border border-gray-700 rounded p-3 text-white text-center font-mono focus:border-white focus:outline-none uppercase tracking-[0.3em] text-base sm:text-lg box-border"
-                                />
-                                <button onClick={handleJoin} className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition-colors uppercase text-sm">
-                                    {t('lobby.join')}
+                        {/* Create Room */}
+                        <div className="relative group overflow-hidden rounded-2xl border border-gray-800 bg-mafia-gray hover:border-mafia-red/50 transition-all p-8 flex flex-col justify-between h-80 shadow-2xl">
+                            <div className="absolute top-0 right-0 p-4 opacity-10">
+                                <Plus size={120} className="text-white" />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                                    <Plus className="text-mafia-red" /> {t('lobby.create_room')}
+                                </h3>
+                                <p className="text-gray-400 text-sm mb-6">{t('lobby.create_room_desc')}</p>
+                            </div>
+
+                            <div>
+                                <div className="mb-4">
+                                    <label className="text-[10px] uppercase font-bold text-gray-500 ml-1 mb-1 block">Тип Кімнати</label>
+                                    <select
+                                        value={createRoomType}
+                                        onChange={e => setCreateRoomType(e.target.value as 'CASUAL' | 'RANKED')}
+                                        className="w-full bg-[#111] border border-gray-700 rounded-lg p-3 text-white text-sm focus:border-mafia-red outline-none appearance-none transition-all"
+                                    >
+                                        <option value="CASUAL">🟢 CASUAL (Без MMR)</option>
+                                        <option value="RANKED">🔴 RANKED (±25 MMR)</option>
+                                    </select>
+                                </div>
+                                <button
+                                    onClick={handleCreate}
+                                    className="w-full bg-mafia-red hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md uppercase text-sm tracking-widest"
+                                >
+                                    {t('lobby.create_room')}
                                 </button>
                             </div>
                         </div>
 
-                        {/* Online Matchmaking */}
-                        <div className="bg-mafia-gray rounded-xl p-6 sm:p-8 border border-gray-800 flex flex-col items-center justify-center text-center hover:border-green-500/50 transition-colors h-full sm:col-span-2 lg:col-span-1">
-                            <Globe size={40} className="text-green-400 mb-3 sm:mb-4" />
-                            <h3 className="text-lg sm:text-xl font-bold mb-2">{t('lobby.online')}</h3>
-                            <p className="text-gray-500 text-xs sm:text-sm mb-4 sm:mb-6">{t('lobby.online_desc')}</p>
-                            <button onClick={handleJoinOnline} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded transition-all shadow-[0_0_10px_rgba(34,197,94,0.3)] uppercase text-sm">
-                                {t('lobby.online')}
-                            </button>
+                        {/* Join Room */}
+                        <div className="relative group overflow-hidden rounded-2xl border border-gray-800 bg-mafia-gray hover:border-blue-500/50 transition-all p-8 flex flex-col justify-between h-80 shadow-2xl">
+                             <div className="absolute top-0 right-0 p-4 opacity-10">
+                                <Users size={120} className="text-white" />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-bold mb-2 flex items-center gap-2">
+                                    <Users className="text-blue-400" /> {t('lobby.join')}
+                                </h3>
+                                <p className="text-gray-400 text-sm mb-6">{t('lobby.join_desc')}</p>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={inputRoomId}
+                                        onChange={e => setInputRoomId(e.target.value)}
+                                        placeholder={t('lobby.join_code_placeholder')}
+                                        maxLength={6}
+                                        className="w-full bg-[#111] border border-gray-700 rounded-xl p-4 text-white text-center font-mono focus:border-blue-500 outline-none uppercase tracking-[0.5em] text-xl"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleJoin}
+                                    className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors uppercase text-sm tracking-widest"
+                                >
+                                    {t('lobby.join')}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : isSearchingOnline ? (
                     /* Searching for Online Match */
-                    <div className="bg-mafia-gray rounded-xl border border-green-800 p-8 sm:p-12 text-center">
-                        <div className="animate-spin w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-6"></div>
-                        <h2 className="text-2xl font-bold mb-2">{t('lobby.searching')}</h2>
-                        <p className="text-gray-500 text-sm mb-4">{t('lobby.online_desc')}</p>
+                    <div className="w-full max-w-2xl bg-mafia-gray rounded-2xl border border-green-500/30 overflow-hidden shadow-2xl relative">
+                        <img
+                            src="/assets/radar_bg.png"
+                            alt="Radar"
+                            className="absolute inset-0 w-full h-full object-cover opacity-10"
+                        />
+                        <div className="relative p-8 sm:p-12 text-center flex flex-col items-center">
+                            <div className="relative mb-8">
+                                <div className="absolute inset-0 bg-green-500/20 rounded-full blur-2xl animate-pulse"></div>
+                                <div className="animate-spin w-24 h-24 border-t-4 border-l-4 border-green-500 rounded-full relative z-10 flex items-center justify-center">
+                                    <Globe size={40} className="text-green-400" />
+                                </div>
+                            </div>
+                            <h2 className="text-3xl font-bold mb-2 text-white uppercase tracking-tighter">{t('lobby.searching')}</h2>
+                            <p className="text-gray-400 text-sm mb-8">{t('lobby.online_desc')}</p>
 
-                        <div className="bg-[#111] p-4 rounded-lg border border-gray-800 mb-8 max-w-sm mx-auto">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-gray-400 font-medium">У черзі:</span>
-                                <span className="text-xl font-bold text-white">{onlineQueueInfo.inQueue} / {onlineQueueInfo.maxPlayers}</span>
+                            <div className="w-full bg-black/40 backdrop-blur-md p-6 rounded-2xl border border-gray-800 mb-8 max-w-sm">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-gray-400 font-medium">Гравців у черзі:</span>
+                                    <span className="text-2xl font-black text-green-400 font-mono">{onlineQueueInfo.inQueue} / {onlineQueueInfo.maxPlayers}</span>
+                                </div>
+
+                                <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-6">
+                                    <div
+                                        className="bg-green-500 h-full transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"
+                                        style={{ width: `${(onlineQueueInfo.inQueue / onlineQueueInfo.maxPlayers) * 100}%` }}
+                                    ></div>
+                                </div>
+
+                                {onlineQueueInfo.timer !== null ? (
+                                    <div className="p-4 bg-green-900/40 border border-green-700/50 rounded-xl">
+                                        <p className="text-green-400 font-bold text-xs uppercase mb-1">Матч знайдено! Гра за</p>
+                                        <p className="text-4xl font-black font-mono text-white tracking-widest">{onlineQueueInfo.timer}с</p>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                                        <p className="text-gray-400 text-xs italic">Очікування набору мінімуму для запуску...</p>
+                                        <div className="flex justify-center gap-1 mt-2 text-green-500">
+                                            <span className="animate-bounce delay-0 w-1.5 h-1.5 bg-current rounded-full"></span>
+                                            <span className="animate-bounce delay-75 w-1.5 h-1.5 bg-current rounded-full"></span>
+                                            <span className="animate-bounce delay-150 w-1.5 h-1.5 bg-current rounded-full"></span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
-                            {onlineQueueInfo.timer !== null ? (
-                                <div className="mt-4 p-3 bg-green-900/40 border border-green-700/50 rounded animate-pulse">
-                                    <p className="text-green-400 font-bold mb-1">Гра почнеться через</p>
-                                    <p className="text-3xl font-mono text-white">{onlineQueueInfo.timer} сек</p>
-                                </div>
-                            ) : (
-                                <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700/50 rounded">
-                                    <p className="text-gray-400 text-sm">Очікування гравців...</p>
-                                    <p className="text-xs text-gray-500 mt-1">Необхідно мінімум {onlineQueueInfo.minPlayers}</p>
-                                </div>
-                            )}
+                            <button onClick={handleLeaveOnline} className="text-gray-400 hover:text-white font-bold py-2 px-8 rounded-full border border-gray-700 hover:border-gray-500 transition-all text-xs uppercase tracking-widest">
+                                {t('lobby.stop_search')}
+                            </button>
                         </div>
-
-                        <button onClick={handleLeaveOnline} className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-white font-bold py-3 px-8 rounded transition-colors">
-                            {t('lobby.stop_search')}
-                        </button>
                     </div>
                 ) : (
                     /* Inside Room */
@@ -595,27 +653,48 @@ export function Lobby() {
                         </div>
 
                         <div className="p-4 sm:p-6">
-                            <h3 className="text-base sm:text-lg font-medium text-gray-400 mb-4 flex items-center gap-2"><Users size={20} /> {t('lobby.player_list')}</h3>
-                            <ul className="space-y-2 mb-6 sm:mb-8">
+                            {/* Host Banner - Show to host when full/ready */}
+                            {isHost && allReady && (
+                                <motion.div
+                                    initial={{ y: -20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="bg-green-600/20 border border-green-500/50 p-4 rounded-xl mb-6 text-center shadow-[0_0_15px_rgba(34,197,94,0.1)]"
+                                >
+                                    <span className="font-bold text-green-400 uppercase tracking-widest text-sm animate-pulse">Усі гравці готові! Можна запускати.</span>
+                                </motion.div>
+                            )}
+
+                            <h3 className="text-base sm:text-lg font-medium text-gray-400 mb-4 flex items-center gap-2">
+                                <Users size={20} className="text-mafia-red" />
+                                {t('lobby.player_list')}
+                                <span className="ml-auto text-xs text-gray-600">{gameState.players.filter(p => p.isReady).length} готові</span>
+                            </h3>
+                            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
                                 {gameState.players.map(p => (
-                                    <li key={p.userId} className="flex justify-between items-center p-2 sm:p-3 rounded bg-[#1a1a1a] border border-gray-800/50">
-                                        <div className="flex items-center gap-2">
-                                            {p.level && <span className="text-xs text-yellow-500 font-mono font-bold bg-[#111] px-1 rounded border border-yellow-900/50">[{p.level}]</span>}
-                                            <span className="font-medium text-gray-300 text-sm">
-                                                <Link to={`/profile/${p.userId}`} className="hover:text-mafia-red transition-colors">{p.username}</Link> {p.userId === user?.id && `(${t('lobby.you')})`}
-                                                {p.userId === gameState.hostId && <span className="ml-2 text-xs text-mafia-red font-bold">({t('lobby.host')})</span>}
-                                            </span>
+                                    <li key={p.userId} className={`flex justify-between items-center p-3 rounded-xl bg-[#111] border transition-all ${p.isReady ? 'border-green-800/50 bg-green-900/5' : 'border-gray-800/50'}`}>
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            {p.userId === gameState.hostId ? (
+                                                <div className="text-yellow-500" title={t('lobby.host')}><Trophy size={16} fill="currentColor" /></div>
+                                            ) : p.level && (
+                                                <span className="text-[10px] text-gray-500 font-mono font-bold bg-gray-900 px-1 rounded border border-gray-800">LVL {p.level}</span>
+                                            )}
+                                            <Link to={`/profile/${p.userId}`} className={`font-bold text-sm truncate hover:text-white transition-colors uppercase tracking-wider ${p.userId === user?.id ? 'text-mafia-red' : 'text-gray-300'}`}>
+                                                {p.username}
+                                            </Link>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-xs px-2 py-1 rounded font-bold ${p.isReady ? 'bg-green-900/50 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
-                                                {p.isReady ? t('lobby.ready') : t('lobby.waiting_status')}
-                                            </span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {p.isReady ? (
+                                                <CheckCircle2 size={18} className="text-green-500" />
+                                            ) : (
+                                                <div className="w-4 h-4 rounded-full border-2 border-dashed border-gray-600 animate-spin"></div>
+                                            )}
                                             {isHost && p.userId !== user?.id && (
                                                 <button
                                                     onClick={() => socket?.emit('host_kick', { roomId: gameState.roomId, targetId: p.userId })}
-                                                    className="text-[10px] uppercase bg-red-900/40 hover:bg-red-700 border border-red-700/60 text-red-300 px-2 py-1 rounded transition-colors"
+                                                    className="p-1 hover:text-red-500 text-gray-600 transition-colors"
+                                                    title={t('lobby.kick')}
                                                 >
-                                                    {t('lobby.kick')}
+                                                    <X size={16} />
                                                 </button>
                                             )}
                                         </div>

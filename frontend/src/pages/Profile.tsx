@@ -3,7 +3,7 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useToastStore } from '../store/toastStore';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Trophy, Hash, Edit2, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { Trophy, Hash, Edit2, Volume2, VolumeX, Loader2, Clock, Award, Skull, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { audioManager } from '../utils/audio';
 import type { UserProfile, Quest } from '../types/api';
@@ -663,32 +663,66 @@ export function Profile() {
                     </div>
 
                     {profile.profile?.matchHistory && profile.profile.matchHistory.length > 0 && (
-                        <div className="mt-8 pt-8 border-t border-gray-800">
-                            <h3 className="text-sm font-bold text-gray-400 mb-4 tracking-widest uppercase">{t('profile.match_history')}</h3>
-                            <div className="space-y-2">
-                                {profile.profile.matchHistory.map(mh => (
-                                    <div key={mh.id} className="bg-[#111] border border-gray-800 rounded p-3 sm:p-4 outline outline-1 outline-transparent hover:outline-gray-700 transition flex items-center justify-between">
-                                        <div className="flex items-center gap-3 sm:gap-4">
-                                            <div className={`w-1.5 sm:w-2 h-8 sm:h-10 rounded-full ${mh.won ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            <div>
-                                                <p className="text-white font-bold text-base sm:text-lg mb-1">{mh.role === 'MAFIA' || mh.role === 'DON' ? <span className="text-red-500">{mh.role}</span> : (mh.role === 'SHERIFF' ? <span className="text-yellow-500">{mh.role}</span> : (mh.role === 'JESTER' ? <span className="text-pink-500">{mh.role}</span> : <span className="text-blue-500">{mh.role}</span>))}</p>
-                                                <p className="text-[10px] sm:text-xs text-gray-500">{new Date(mh.match.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</p>
+                        <div className="mt-12 pt-10 border-t border-gray-800">
+                            <h3 className="text-xs font-black text-gray-500 mb-6 tracking-[0.3em] uppercase flex items-center gap-2">
+                                <Clock size={14} className="text-mafia-red" />
+                                {t('profile.match_history')}
+                            </h3>
+                            <div className="space-y-4">
+                                {profile.profile.matchHistory.map(mh => {
+                                    const roleColors: Record<string, string> = {
+                                        'MAFIA': 'text-red-500', 'DON': 'text-red-600', 'SILENCER': 'text-red-400', 'BOMBER': 'text-red-400',
+                                        'SHERIFF': 'text-yellow-500', 'MAYOR': 'text-yellow-400', 'JUDGE': 'text-yellow-600',
+                                        'DOCTOR': 'text-blue-400', 'BODYGUARD': 'text-blue-500', 'TRACKER': 'text-cyan-400', 'INFORMER': 'text-cyan-500', 'JOURNALIST': 'text-blue-300',
+                                        'SERIAL_KILLER': 'text-purple-500', 'JESTER': 'text-pink-500', 'LOVERS': 'text-pink-400'
+                                    };
+                                    const roleColor = roleColors[mh.role as string] || 'text-blue-400';
+                                    
+                                    return (
+                                        <div 
+                                            key={mh.id} 
+                                            onClick={() => navigate(`/match/${mh.match.id}`)}
+                                            className="group relative bg-[#111] border border-gray-800 rounded-3xl p-5 overflow-hidden transition-all hover:border-mafia-red/50 hover:bg-gray-900/50 cursor-pointer active:scale-[0.98]"
+                                        >
+                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+                                                <div className="flex items-center gap-5">
+                                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border-2 transition-transform group-hover:scale-110 ${mh.won ? 'bg-green-500/10 border-green-500/40 text-green-500' : 'bg-red-500/10 border-red-500/40 text-red-500'}`}>
+                                                        {mh.won ? <Trophy size={20} /> : <Skull size={20} />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <p className={`font-black uppercase italic text-lg tracking-tighter ${roleColor}`}>{mh.role}</p>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${mh.won ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+                                                        </div>
+                                                        <p className="text-[10px] sm:text-xs text-gray-500 font-bold uppercase tracking-widest">
+                                                            {new Date(mh.match.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                                                    <div className="text-right">
+                                                        <p className={`text-xs font-black uppercase tracking-widest mb-1 ${mh.won ? 'text-green-500' : 'text-red-500'}`}>
+                                                            {mh.won ? t('profile.victory') : t('profile.defeat')}
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-600 font-bold flex items-center justify-end gap-2 uppercase">
+                                                            <Clock size={10} /> {mh.match.duration} {t('profile.days')}
+                                                            <span className="text-gray-800 mx-1">|</span>
+                                                            <Award size={10} /> {mh.match.winner}
+                                                        </p>
+                                                    </div>
+                                                    <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-gray-700 group-hover:text-mafia-red transition-colors border border-gray-800">
+                                                        <ArrowRight size={18} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Decorative Background Winner text */}
+                                            <div className="absolute right-[-10%] top-[-20%] opacity-[0.02] text-[80px] font-black uppercase italic pointer-events-none select-none transition-opacity group-hover:opacity-[0.05]">
+                                                {mh.match.winner}
                                             </div>
                                         </div>
-                                        <div className="text-right flex flex-col items-end gap-2">
-                                            <div>
-                                                <p className={`font-bold text-sm ${mh.won ? 'text-green-500' : 'text-red-500'}`}>{mh.won ? t('profile.victory') : t('profile.defeat')}</p>
-                                                <p className="text-[10px] sm:text-xs text-gray-500 flex items-center justify-end gap-1"><Trophy size={10} /> {mh.match.winner} | {mh.match.duration} {t('profile.days')}</p>
-                                            </div>
-                                            <button
-                                                onClick={() => navigate(`/match/${mh.match.id}`)}
-                                                className="text-[10px] sm:text-xs bg-[#222] hover:bg-[#333] border border-gray-700 text-white py-1 px-2 rounded transition"
-                                            >
-                                                Реплей
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../store';
 import { Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ import { useGameSocket } from '../hooks/useGameSocket';
 import { useGameActions } from '../hooks/useGameActions';
 import { useMobileChatUI } from '../hooks/useMobileChatUI';
 import { getPhaseLabel, getRoleLabel, getRoleColor, getBgColor } from '../game/gameHelpers';
+import { audioManager } from '../utils/audio';
 
 // Hook to detect mobile viewport
 function useIsMobile(breakpoint = 768) {
@@ -31,6 +32,43 @@ export function Game() {
     const { user, gameState, soundSettings, updateSoundSettings } = useAppStore();
     const { t } = useTranslation();
     const isMobile = useIsMobile();
+    const prevPhaseRef = useRef<string | null>(null);
+
+    // Audio Effects
+    useEffect(() => {
+        if (gameState.phase && gameState.phase !== prevPhaseRef.current) {
+            // Sound on phase change
+            if (gameState.phase !== 'END_GAME' && gameState.phase !== 'WAITING_LOBBY') {
+                audioManager.playPhaseChange();
+            }
+
+            // Night Ambient
+            if (gameState.phase === 'NIGHT') {
+                audioManager.startNight();
+            } else {
+                audioManager.stopNight();
+            }
+
+            // Game End Sounds
+            if (gameState.phase === 'END_GAME') {
+                // Determine if I won or lost
+                const me = gameState.players?.find(p => p.userId === user?.id);
+                // We'll trust the late state winner detection
+                const winMsg = gameState.chat.find(m => m.type === 'system' && m.text.includes('ПЕРЕМОГА:'));
+                if (winMsg) {
+                    const isMafia = me?.role === 'MAFIA' || me?.role === 'DON';
+                    const victory = (winMsg.text.includes('МАФІЯ') && isMafia) || 
+                                  (winMsg.text.includes('МИРНІ') && !isMafia && me?.role !== 'SERIAL_KILLER') ||
+                                  (winMsg.text.includes('СЕРІЙНИЙ ВБИВЦЯ') && me?.role === 'SERIAL_KILLER');
+                    
+                    if (victory) audioManager.playVictory();
+                    else audioManager.playDefeat();
+                }
+            }
+
+            prevPhaseRef.current = gameState.phase;
+        }
+    }, [gameState.phase, gameState.players, gameState.chat, user?.id]);
 
     
     // Abstracted socket logic
@@ -124,12 +162,25 @@ export function Game() {
                             className="bg-black/80 absolute inset-0"
                         ></motion.div>
                         <motion.div
-                            initial={{ y: 50 }}
-                            animate={{ y: 0 }}
+                            initial={{ y: 50, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
                             transition={{ type: "spring", stiffness: 100 }}
-                            className="relative text-5xl md:text-7xl font-bold text-white tracking-widest drop-shadow-[0_0_30px_rgba(255,255,255,0.5)] text-center"
+                            className="relative flex flex-col items-center"
                         >
-                            {phaseLabel(overlayPhase)}
+                            <span className="text-5xl md:text-8xl font-black text-white tracking-widest drop-shadow-[0_0_30px_rgba(255,255,255,0.5)] text-center uppercase">
+                                {phaseLabel(overlayPhase)}
+                            </span>
+                            <motion.span
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.5 }}
+                                className="text-gray-400 text-sm md:text-xl font-mono mt-4 tracking-[0.5em] uppercase"
+                            >
+                                {overlayPhase === 'NIGHT' && 'Тіні оживають...'}
+                                {overlayPhase === 'DAY_DISCUSSION' && 'Час говорити...'}
+                                {overlayPhase === 'DAY_VOTING' && 'Вердикт за вами...'}
+                                {overlayPhase === 'END_GAME' && 'Завіса опускається...'}
+                            </motion.span>
                         </motion.div>
                     </motion.div>
                 )}

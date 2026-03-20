@@ -170,82 +170,100 @@ export function Clans() {
     const balance = profile.wallet?.soft || 0;
 
     return (
-        <div className="min-h-screen bg-mafia-dark text-mafia-light p-4 flex flex-col items-center relative">
-            <div className="w-full max-w-5xl mt-8">
-                <div className="flex justify-between items-center mb-8">
-                    <button onClick={() => navigate('/lobby')} className="text-mafia-red hover:underline">&larr; В Лоббі</button>
-                    <div className="bg-[#1a1a1a] px-4 py-2 rounded-full border border-yellow-500/30 flex items-center gap-2">
-                        <CoinIcon size={20} />
-                        <span className="font-bold text-yellow-500">{balance}</span>
-                        <span className="text-sm text-gray-400 font-bold ml-1">Монет</span>
-                    </div>
-                </div>
-
-                <div className="mb-10 text-center">
-                    <h1 className="text-4xl font-bold text-white mb-2 flex items-center justify-center gap-2">
-                        <Shield className="text-blue-500" size={32} />
-                        Клани
-                    </h1>
-                    <p className="text-gray-500">Приєднуйтесь до інших або створіть власну імперію</p>
-                </div>
-
-                {myClan && (
-                    <div className="bg-[#111] border border-blue-900 rounded-xl p-6 mb-10 shadow-[0_0_20px_rgba(59,130,246,0.15)]">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h2 className="text-sm text-blue-500 font-bold uppercase tracking-widest mb-1">Ваш Клан</h2>
-                                <h3 className="text-3xl font-bold text-white mb-2">{myClan.name}</h3>
-                                <p className="text-gray-400 text-sm mb-4">Лідер: <span className="text-white font-medium">{myClan.owner.username}</span></p>
-                            </div>
-                            <button
-                                onClick={handleLeaveClan}
-                                disabled={actionLoading}
-                                className="bg-red-900/40 hover:bg-red-800 text-red-500 hover:text-white px-4 py-2 rounded font-bold transition flex items-center gap-2 text-sm border border-red-900"
-                            >
-                                {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} Покинути
-                            </button>
+        <>
+            <div className="relative overflow-hidden bg-[#0d0d0d] border-b border-gray-800 w-full">
+                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_#3b82f6_0%,_transparent_70%)] pointer-events-none" />
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16 relative z-10 text-center">
+                    <div className="flex justify-between items-center absolute top-4 left-4 right-4 sm:px-4">
+                        <button onClick={() => navigate('/lobby')} className="text-gray-400 hover:text-white transition flex items-center gap-1 text-sm font-bold">
+                            <ArrowLeft size={16} /> {t('common.back')}
+                        </button>
+                        <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-yellow-500/30 flex items-center gap-2 shadow-lg">
+                            <CoinIcon size={20} />
+                            <span className="font-black text-yellow-500">{balance}</span>
                         </div>
+                    </div>
 
-                        <div className="mt-6 border-t border-gray-800 pt-6">
-                            <h4 className="text-sm font-bold text-gray-400 mb-4">Учасники ({myClan.members.length})</h4>
-                            <div className="bg-[#1a1a1a] rounded border border-gray-800 overflow-hidden">
-                                <div className="grid grid-cols-12 gap-4 p-3 border-b border-gray-800 text-xs font-bold text-gray-500 uppercase">
-                                    <div className="col-span-4">Гравець</div>
-                                    <div className="col-span-3">Роль</div>
-                                    <div className="col-span-2 text-center">Контрибуція</div>
-                                    <div className="col-span-3 text-right">Дії</div>
+                    <h1 className="text-4xl sm:text-6xl font-black text-white mb-4 uppercase tracking-tighter flex items-center justify-center gap-4">
+                        <Shield className="text-blue-500" size={48} /> Клани
+                    </h1>
+                    <p className="text-gray-400 text-sm sm:text-lg max-w-xl mx-auto">Обирай сторону, створюй альянси та домінуй у кланових війнах</p>
+                </div>
+            </div>
+
+            <div className="w-full max-w-5xl p-4 sm:p-6 mb-20 mx-auto">
+                {myClan ? (
+                    <div className="mb-16">
+                        <div className="bg-[#111] border border-blue-900/40 rounded-3xl overflow-hidden shadow-2xl relative">
+                             <div className="bg-gradient-to-r from-blue-900/20 to-transparent p-6 sm:p-10 border-b border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div>
+                                    <h2 className="text-xs text-blue-500 font-bold uppercase tracking-[0.3em] mb-2">Ваша організація</h2>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-3xl sm:text-5xl font-black text-white">{myClan.name}</h3>
+                                        <div className="bg-blue-500/10 border border-blue-500/30 px-3 py-1 rounded-full text-[10px] font-black text-blue-400 uppercase">LVL 1</div>
+                                    </div>
+                                    <p className="text-gray-400 text-sm mt-3 flex items-center gap-2">
+                                        <Shield size={14} className="text-gray-600" /> Клан-лідер: <span className="text-white font-bold">{myClan.owner.username}</span>
+                                    </p>
                                 </div>
-                                <div className="divide-y divide-gray-800 text-sm">
+                                <button
+                                    onClick={handleLeaveClan}
+                                    disabled={actionLoading}
+                                    className="bg-red-950/30 hover:bg-red-600 text-red-500 hover:text-white px-6 py-3 rounded-xl font-black transition-all flex items-center gap-2 text-xs uppercase tracking-widest border border-red-900/50"
+                                >
+                                    {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />} Покинути Клан
+                                </button>
+                            </div>
+
+                            <div className="p-6 sm:p-8">
+                                <h4 className="text-sm font-black text-gray-500 mb-6 uppercase tracking-widest flex items-center gap-2">
+                                    <Users size={16} /> Склад Клану ({myClan.members.length})
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {myClan.members.map((m: clansApi.ClanMember) => {
                                         const isCurrentUser = m.userId === profile.id;
 
                                         return (
-                                            <div key={m.id} className="grid grid-cols-12 gap-4 p-3 items-center">
-                                                <div className="col-span-4 font-bold text-white">
-                                                    {m.user?.username || m.userId.substring(0, 8)} {isCurrentUser && '(Ви)'}
+                                            <div key={m.id} className={`p-4 rounded-2xl border transition-all ${isCurrentUser ? 'bg-blue-600/5 border-blue-500/30' : 'bg-[#161616] border-gray-800 hover:border-gray-700'}`}>
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className={`font-black text-lg truncate ${isCurrentUser ? 'text-blue-400' : 'text-white'}`}>
+                                                            {m.user?.username || m.userId.substring(0, 8)} 
+                                                        </span>
+                                                        <span className={`text-[9px] font-black uppercase tracking-wider w-fit px-1.5 py-0.5 rounded ${
+                                                            m.clanRole === 'OWNER' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30' : 
+                                                            m.clanRole === 'OFFICER' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30' : 
+                                                            'bg-gray-800 text-gray-400'
+                                                        }`}>
+                                                            {m.clanRole === 'OWNER' ? '👑 Лідер' : m.clanRole === 'OFFICER' ? '⭐ Офіцер' : '👤 Учасник'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[10px] text-gray-600 font-bold uppercase">Внесок</p>
+                                                        <p className="text-sm font-mono text-gray-400">{m.clanContribution}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="col-span-3 flex items-center gap-2">
-                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${m.clanRole === 'OWNER' ? 'bg-yellow-900/50 text-yellow-500 border border-yellow-700/50' : m.clanRole === 'OFFICER' ? 'bg-blue-900/50 text-blue-400 border border-blue-700/50' : 'bg-gray-800 text-gray-400 border border-gray-700'}`}>
-                                                        {m.clanRole === 'OWNER' ? 'ЛІДЕР' : m.clanRole === 'OFFICER' ? 'ОФІЦЕР' : 'УЧАСНИК'}
-                                                    </span>
-                                                </div>
-                                                <div className="col-span-2 text-center text-gray-400 font-mono">{m.clanContribution}</div>
-                                                <div className="col-span-3 flex justify-end gap-2 text-xs">
-                                                    {myRole === 'OWNER' && !isCurrentUser && (
-                                                        <>
-                                                            {m.clanRole !== 'OFFICER' && (
-                                                                <button onClick={() => handlePromote(m.userId, 'OFFICER')} className="text-blue-400 hover:text-white transition px-2 py-1 bg-blue-900/30 rounded border border-blue-800/50">ОФІЦЕР</button>
-                                                            )}
-                                                            {m.clanRole === 'OFFICER' && (
-                                                                <button onClick={() => handlePromote(m.userId, 'MEMBER')} className="text-gray-400 hover:text-white transition px-2 py-1 bg-gray-800 rounded border border-gray-700">ЗАБРАТИ</button>
-                                                            )}
-                                                            <button onClick={() => handleKick(m.userId)} className="text-red-400 hover:text-white transition px-2 py-1 bg-red-900/30 rounded border border-red-800/50">КИКНУТИ</button>
-                                                        </>
-                                                    )}
-                                                    {myRole === 'OFFICER' && !isCurrentUser && m.clanRole === 'MEMBER' && (
-                                                        <button onClick={() => handleKick(m.userId)} className="text-red-400 hover:text-white transition px-2 py-1 bg-red-900/30 rounded border border-red-800/50">КИКНУТИ</button>
-                                                    )}
-                                                </div>
+
+                                                {((myRole === 'OWNER' || myRole === 'OFFICER') && !isCurrentUser) && (
+                                                    <div className="mt-4 pt-4 border-t border-gray-800 flex gap-2">
+                                                        {myRole === 'OWNER' && (
+                                                            <button 
+                                                                onClick={() => handlePromote(m.userId, m.clanRole === 'OFFICER' ? 'MEMBER' : 'OFFICER')}
+                                                                className={`flex-1 text-[9px] font-black uppercase py-2 rounded-lg transition-all ${m.clanRole === 'OFFICER' ? 'bg-gray-800 text-gray-400 hover:bg-gray-700' : 'bg-blue-900/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-800/50'}`}
+                                                            >
+                                                                {m.clanRole === 'OFFICER' ? 'Зняти' : 'У Офіцери'}
+                                                            </button>
+                                                        )}
+                                                        {(myRole === 'OWNER' || (myRole === 'OFFICER' && m.clanRole === 'MEMBER')) && (
+                                                            <button 
+                                                                onClick={() => handleKick(m.userId)}
+                                                                className="flex-1 text-[9px] font-black uppercase py-2 rounded-lg bg-red-900/20 text-red-500 hover:bg-red-600 hover:text-white border border-red-900/40 transition-all font-bold"
+                                                            >
+                                                                Вигнати
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -253,66 +271,65 @@ export function Clans() {
                             </div>
                         </div>
                     </div>
-                )}
-
-                {!myClan && (
-                    <div className="flex justify-end mb-6">
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="bg-mafia-red hover:bg-red-700 text-white font-bold py-2 px-6 rounded transition flex items-center gap-2 shadow-[0_0_10px_rgba(204,0,0,0.3)]"
-                        >
-                            <Plus size={20} /> Створити Клан (1000 <CoinIcon size={16} />)
-                        </button>
+                ) : (
+                    <div className="mb-12 flex flex-col sm:flex-row justify-between items-center gap-6">
+                        <div className="bg-[#111] p-6 rounded-2xl border border-gray-800 flex-1 w-full sm:w-auto">
+                            <p className="text-gray-400 text-sm mb-4">Ви ще не приєдналися до жодного клану. Створіть свій власний клан, щоб розблокувати війни та бонуси!</p>
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-500 text-white font-black py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase tracking-tighter shadow-xl active:scale-95"
+                            >
+                                <Plus size={24} /> Створити Клан (1000 <CoinIcon size={20} />)
+                            </button>
+                        </div>
                     </div>
                 )}
 
-                <div className="bg-[#1a1a1a] rounded-xl border border-gray-800 overflow-hidden">
-                    <div className="grid grid-cols-12 gap-4 p-4 border-b border-gray-800 text-sm font-bold text-gray-500 uppercase tracking-wider">
-                        <div className="col-span-1">#</div>
-                        <div className="col-span-5">Назва Клану</div>
-                        <div className="col-span-3">Лідер</div>
-                        <div className="col-span-1 text-center">Учасників</div>
-                        <div className="col-span-2 text-right">Дія</div>
-                    </div>
-
-                    {clans.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500">Ще немає жодного клану. Станьте першим!</div>
-                    ) : (
-                        <div className="divide-y divide-gray-800/50">
-                            {clans.map((clan, idx) => (
-                                <div key={clan.id} className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-[#222] transition">
-                                    <div className="col-span-1 font-mono text-gray-500">{idx + 1}</div>
-                                    <div className="col-span-5 font-bold text-white text-lg">{clan.name}</div>
-                                    <div className="col-span-3 text-gray-400">{clan.owner.username}</div>
-                                    <div className="col-span-1 text-center text-gray-300 flex items-center justify-center gap-1">
-                                        <Users size={14} className="text-gray-500" /> {clan.members.length}
+                <div className="mb-6">
+                    <h3 className="text-2xl font-black text-white mb-6 uppercase tracking-tight flex items-center gap-2">
+                        <Users size={24} className="text-blue-500" /> Глобальний список
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {clans.map((clan, idx) => (
+                            <div key={clan.id} className={`group bg-[#111] border rounded-2xl p-5 transition-all flex items-center justify-between ${myClanId === clan.id ? 'border-blue-500/50 ring-1 ring-blue-500/20' : 'border-gray-800 hover:border-gray-700 shadow-lg'}`}>
+                                <div className="flex items-center gap-4 min-w-0">
+                                    <div className="w-10 h-10 shrink-0 bg-gray-900 rounded-xl flex items-center justify-center font-black text-gray-500 border border-gray-800">
+                                        {idx + 1}
                                     </div>
-                                    <div className="col-span-2 text-right">
-                                        {!myClanId && (
-                                            <button
-                                                onClick={() => handleJoinClan(clan.name)}
-                                                disabled={actionLoading}
-                                                className="text-blue-500 hover:text-white bg-blue-900/20 hover:bg-blue-600 px-3 py-1.5 rounded transition font-bold text-sm border border-blue-900/50 flex items-center justify-center gap-1"
-                                            >
-                                                Вступити
-                                            </button>
-                                        )}
-                                        {myClanId === clan.id ? (
-                                            <span className="text-blue-500 font-bold text-sm bg-blue-900/20 px-3 py-1.5 rounded border border-blue-900/50">
-                                                Ваш клан
-                                            </span>
-                                        ) : myClanId && canManageWars ? (
-                                            <button
-                                                onClick={() => { setSelectedTargetClan(clan); setShowWarModal(true); setWarBet(''); }}
-                                                disabled={actionLoading}
-                                                className="text-red-500 hover:text-white bg-red-900/20 hover:bg-red-600 px-3 py-1.5 rounded transition font-bold text-sm border border-red-900/50 flex items-center gap-1 ml-auto"
-                                            >
-                                                <Swords size={14} /> Війна
-                                            </button>
-                                        ) : null}
+                                    <div className="min-w-0">
+                                        <h4 className="text-xl font-black text-white truncate group-hover:text-blue-400 transition-colors">{clan.name}</h4>
+                                        <p className="text-xs text-gray-500 font-medium truncate flex items-center gap-1">
+                                            <Shield size={10} /> {clan.owner.username} • <Users size={10} /> {clan.members.length}
+                                        </p>
                                     </div>
                                 </div>
-                            ))}
+                                <div className="shrink-0 ml-4">
+                                    {!myClanId ? (
+                                        <button
+                                            onClick={() => handleJoinClan(clan.name)}
+                                            disabled={actionLoading}
+                                            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase rounded-xl transition-all shadow-lg active:scale-95"
+                                        >
+                                            Вступити
+                                        </button>
+                                    ) : myClanId === clan.id ? (
+                                        <span className="text-[10px] font-black uppercase px-3 py-1.5 bg-blue-500/10 text-blue-500 rounded-lg border border-blue-500/20">Ваш клан</span>
+                                    ) : (canManageWars && (
+                                        <button
+                                            onClick={() => { setSelectedTargetClan(clan); setShowWarModal(true); setWarBet(''); }}
+                                            className="p-2.5 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-900/50 rounded-xl transition-all"
+                                            title="Оголосити війну"
+                                        >
+                                            <Swords size={18} />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {clans.length === 0 && (
+                        <div className="bg-[#111] rounded-2xl border border-gray-800 p-12 text-center text-gray-600">
+                            Тут поки що порожньо. Будьте першим, хто створить клан!
                         </div>
                     )}
                 </div>
@@ -431,7 +448,7 @@ export function Clans() {
             </div>
 
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-[#111] border border-gray-700 p-8 rounded-xl w-full max-w-md shadow-2xl">
                         <h2 className="text-2xl font-bold text-white mb-6">Створення Клану</h2>
                         <div className="mb-6">
@@ -459,7 +476,7 @@ export function Clans() {
                             <button
                                 onClick={handleCreateClan}
                                 disabled={actionLoading || balance < 1000 || newClanName.length < 3}
-                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-bold py-3 rounded transition flex justify-center gap-2 items-center"
+                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-500 text-white font-black py-3 rounded transition flex justify-center gap-2 items-center uppercase text-sm"
                             >
                                 {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}
                                 Створити
@@ -470,7 +487,7 @@ export function Clans() {
             )}
 
             {showWarModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-[#111] border border-gray-700 p-8 rounded-xl w-full max-w-md shadow-2xl">
                         <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
                             <Swords className="text-red-500" /> Оголосити Війну
@@ -502,7 +519,7 @@ export function Clans() {
                             <button
                                 onClick={handleDeclareWar}
                                 disabled={actionLoading}
-                                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold py-3 rounded transition flex items-center justify-center gap-2"
+                                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-black py-3 rounded transition flex items-center justify-center gap-2 uppercase text-sm"
                             >
                                 {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <Swords size={20} />} У Бій!
                             </button>
@@ -510,6 +527,6 @@ export function Clans() {
                     </div>
                 </div>
             )}
-        </div>
+        </>
     );
 }

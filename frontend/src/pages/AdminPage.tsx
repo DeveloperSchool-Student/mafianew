@@ -687,7 +687,7 @@ function StaffTab({ token, myPower }: { token: string; myPower: number }) {
    ═══════════════════════════════════════════════════════════ */
 function LogsTab({ token, myPower, onUserAction }: { token: string; myPower: number; onUserAction: (username: string) => void }) {
     const { addToast } = useToastStore();
-    const [logs, setLogs] = useState<any[]>([]);
+    const [logs, setLogs] = useState<AdminLog[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [clearDays, setClearDays] = useState<number | 'all'>(7);

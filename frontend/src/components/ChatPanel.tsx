@@ -122,32 +122,45 @@ export function ChatPanel({
             <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col min-h-0">
                 {activeTab === 'chat' || activeTab === 'dead_chat' ? (
                     <div className="flex flex-col gap-2 mt-auto">
-                        {gameState.chat?.filter((msg: ChatMessage) => activeTab === 'dead_chat' ? msg.type === 'dead' || msg.type === 'system' : msg.type !== 'dead').map((msg: ChatMessage) => (
-                            <div key={msg.id} className={`p-2 rounded text-sm ${msg.type === 'system' ? 'bg-[#1a1a1a] text-gray-400 border-l-2 border-mafia-red' :
-                                msg.type === 'mafia' ? 'bg-red-900/20 text-red-200 border-l-2 border-red-500' :
-                                    msg.type === 'dead' ? 'bg-gray-900 text-gray-500 italic' :
-                                        'bg-[#222] text-gray-200'
+                        {gameState.chat?.filter((msg: ChatMessage) => activeTab === 'dead_chat' ? msg.type === 'dead' || msg.type === 'system' : msg.type !== 'dead').map((msg: ChatMessage) => {
+                            const isSystem = msg.type === 'system';
+                            const isMafia = msg.type === 'mafia';
+                            const isDead = msg.type === 'dead';
+
+                            return (
+                                <div key={msg.id} className={`p-2.5 rounded-lg text-sm transition-all border ${
+                                    isSystem ? 'bg-[#1a1a1a] text-gray-400 border-mafia-red/30 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]' :
+                                    isMafia ? 'bg-red-900/10 text-red-200 border-red-900/40' :
+                                    isDead ? 'bg-gray-900/50 text-gray-500 italic border-gray-800' :
+                                    'bg-[#1a1a1a] text-gray-200 border-gray-800/50 hover:border-gray-700'
                                 }`}>
-                                {msg.type !== 'system' && <span className="font-bold mr-2 opacity-70">
-                                    {msg.type === 'dead' && '[Мертві/Глядачі] '}
-                                    {msg.staffRoleTitle && msg.staffRoleColor && (
-                                        <span
-                                            className="text-[10px] font-bold px-1 py-0.5 rounded mr-1 align-middle"
-                                            style={{
-                                                color: msg.staffRoleColor,
-                                                backgroundColor: msg.staffRoleColor + '22',
-                                                border: `1px solid ${msg.staffRoleColor}55`,
-                                            }}
-                                        >
-                                            {msg.staffRoleTitle}
-                                        </span>
+                                    {!isSystem && (
+                                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                            {isDead && <span className="text-[10px] bg-gray-800 px-1.5 py-0.5 rounded text-gray-400 font-bold uppercase tracking-tighter">DEAD</span>}
+                                            {isMafia && <span className="text-[10px] bg-red-900/40 px-1.5 py-0.5 rounded text-red-400 font-bold uppercase tracking-tighter">MAFIA</span>}
+                                            {msg.staffRoleTitle && msg.staffRoleColor && (
+                                                <span
+                                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-current"
+                                                    style={{
+                                                        color: msg.staffRoleColor,
+                                                        backgroundColor: msg.staffRoleColor + '22',
+                                                    }}
+                                                >
+                                                    {msg.staffRoleTitle}
+                                                </span>
+                                            )}
+                                            <span className="font-black opacity-90 tracking-wide" style={msg.staffRoleColor ? { color: msg.staffRoleColor } : undefined}>
+                                                {msg.sender}
+                                            </span>
+                                        </div>
                                     )}
-                                    <span style={msg.staffRoleColor ? { color: msg.staffRoleColor } : undefined}>
-                                        {msg.sender}
-                                    </span>:</span>}
-                                <span>{msg.text}</span>
-                            </div>
-                        ))}
+                                    <div className={`${isSystem ? 'flex items-center gap-2' : ''}`}>
+                                        {isSystem && <span className="text-mafia-red text-lg font-bold">»</span>}
+                                        <span className="leading-relaxed">{msg.text}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
                         <div ref={chatEndRef} />
                     </div>
                 ) : (

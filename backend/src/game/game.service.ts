@@ -254,6 +254,23 @@ export class GameService implements OnModuleInit {
     const room = await this.getRoom(roomId);
     if (!room) return null;
     room.players = room.players.filter((p) => p.userId !== userId);
+
+    const state = await this.getGameState(roomId);
+    if (state) {
+      const playerIndex = state.players.findIndex((p) => p.userId === userId);
+      if (playerIndex !== -1) {
+        const p = state.players[playerIndex];
+        if (p.isSpectator) {
+          state.players.splice(playerIndex, 1);
+        } else if (p.isAlive) {
+          p.isAlive = false;
+          p.isOnline = false;
+          this.pushMatchLog(state, `Гравець ${p.username} покинув гру.`);
+        }
+        await this.saveGameState(state);
+      }
+    }
+
     if (room.players.length === 0) {
       await this.deleteRoom(roomId);
       await this.deleteGameState(roomId);

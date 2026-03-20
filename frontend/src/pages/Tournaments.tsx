@@ -177,33 +177,43 @@ export function Tournaments() {
     };
 
     return (
-        <div className="min-h-screen bg-mafia-dark text-mafia-light">
-            {/* Header */}
-            <div className="bg-[#161616] border-b border-gray-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-                <div className="flex items-center gap-2 sm:gap-4">
-                    <button onClick={() => navigate('/lobby')} className="text-gray-400 hover:text-white transition">
-                        <ArrowLeft size={20} />
-                    </button>
-                    <Trophy size={20} className="text-yellow-500 sm:w-6 sm:h-6" />
-                    <h1 className="text-base sm:text-xl font-bold">Турніри</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                    {getStaffPower(user.staffRoleKey) >= 8 && (
-                        <button onClick={() => setShowCreate(true)}
-                            className="text-xs bg-yellow-600 hover:bg-yellow-500 text-black px-3 py-1.5 rounded font-bold transition flex items-center gap-1">
-                            <Plus size={14} /> Створити
-                        </button>
-                    )}
+            <div className="relative overflow-hidden bg-[#161616] border-b border-gray-800">
+                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_#ffcc00_0%,_transparent_70%)] pointer-events-none" />
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 relative z-10">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => navigate('/lobby')} className="p-2 bg-gray-800 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+                                <ArrowLeft size={20} />
+                            </button>
+                            <div>
+                                <h1 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
+                                    <Trophy size={32} className="text-yellow-500 animate-pulse" /> Турніри
+                                </h1>
+                                <p className="text-gray-500 text-sm sm:text-base font-medium mt-1">Змагання за славу та нагороди</p>
+                            </div>
+                        </div>
+                        {getStaffPower(user.staffRoleKey) >= 8 && (
+                            <button onClick={() => setShowCreate(true)}
+                                className="bg-yellow-600 hover:bg-yellow-500 text-black px-6 py-3 rounded-xl font-black transition-all flex items-center justify-center gap-2 uppercase tracking-widest shadow-[0_0_20px_rgba(202,138,4,0.3)] active:scale-95">
+                                <Plus size={18} /> Створити Турнір
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            <div className="max-w-4xl mx-auto p-3 sm:p-6">
+            <div className="max-w-4xl mx-auto p-4 sm:p-6 mb-20">
                 {/* Filters */}
-                <div className="flex gap-2 mb-6 flex-wrap">
-                    {['', 'REGISTRATION', 'ACTIVE', 'FINISHED'].map(s => (
-                        <button key={s} onClick={() => setFilter(s)}
-                            className={`text-xs px-3 py-1.5 rounded border transition ${filter === s ? 'bg-yellow-500/20 border-yellow-500 text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}
-                        >{s || 'Всі'}</button>
+                <div className="flex gap-2 mb-8 overflow-x-auto pb-2 no-scrollbar">
+                    {[
+                        { value: '', label: 'Всі Події' },
+                        { value: 'REGISTRATION', label: '📝 Реєстрація' },
+                        { value: 'ACTIVE', label: '⚔️ Активні' },
+                        { value: 'FINISHED', label: '🏆 Завершені' }
+                    ].map(s => (
+                        <button key={s.value} onClick={() => setFilter(s.value)}
+                            className={`text-xs font-bold px-5 py-2.5 rounded-full border transition-all whitespace-nowrap ${filter === s.value ? 'bg-yellow-500 border-yellow-500 text-black shadow-lg' : 'bg-[#111] border-gray-800 text-gray-500 hover:border-gray-600 hover:text-white'}`}
+                        >{s.label}</button>
                     ))}
                 </div>
 
@@ -408,30 +418,55 @@ export function Tournaments() {
                         <p className="text-gray-500">Немає турнірів{filter ? ` (${filter})` : ''}.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         {tournaments.map(t => {
                             const isJoined = t.participants.some(p => p.userId === user.id);
                             return (
                                 <div
                                     key={t.id}
                                     onClick={() => loadTournament(t.id)}
-                                    className="bg-[#1a1a1a] border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-yellow-500/50 transition group"
+                                    className="bg-[#111] border border-gray-800 rounded-2xl overflow-hidden cursor-pointer hover:border-yellow-500/40 transition-all group flex flex-col h-full shadow-lg hover:shadow-yellow-500/5"
                                 >
-                                    <div className="flex justify-between items-start mb-3">
-                                        <h3 className="font-bold text-lg text-white group-hover:text-yellow-400 transition">{t.name}</h3>
-                                        <span className={`text-xs px-2 py-1 rounded border ${statusColors[t.status] || 'bg-gray-800 text-gray-400 border-gray-600'}`}>
-                                            {statusLabels[t.status] || t.status}
-                                        </span>
+                                    <div className="p-6 flex flex-col flex-1">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex flex-col">
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded border w-fit mb-2 uppercase ${statusColors[t.status] || 'bg-gray-800'}`}>
+                                                    {statusLabels[t.status]?.replace(/[^a-zA-Z а-яА-ЯіїєґІЇЄҐ]/g, '') || t.status}
+                                                </span>
+                                                <h3 className="font-black text-xl text-white group-hover:text-yellow-400 transition tracking-tight">{t.name}</h3>
+                                            </div>
+                                            {isJoined && (
+                                                <div className="bg-green-500/20 p-1.5 rounded-full border border-green-500/50" title="Ви учасник">
+                                                    <Check size={14} className="text-green-400" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 my-4">
+                                            <div className="bg-black/40 rounded-xl p-3 border border-gray-800/50">
+                                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Приз</p>
+                                                <p className="text-lg font-black text-yellow-500 flex items-center gap-1">{t.prizePool} <CoinIcon size={14} /></p>
+                                            </div>
+                                            <div className="bg-black/40 rounded-xl p-3 border border-gray-800/50">
+                                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Учасників</p>
+                                                <p className="text-lg font-black text-white flex items-center gap-1"><Users size={16} className="text-gray-400" /> {t.participants.length}/{t.maxParticipants}</p>
+                                            </div>
+                                        </div>
+
+                                        {t.entryFee > 0 && (
+                                            <div className="text-xs text-orange-400 font-bold flex items-center gap-1 mb-2">
+                                                🎟️ Вхід: {t.entryFee} 🪙
+                                            </div>
+                                        )}
+
+                                        <div className="mt-auto pt-4 border-t border-gray-800/50 flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                                            <span>#{t.id.slice(0, 8)}</span>
+                                            <span>{new Date(t.createdAt).toLocaleDateString('uk-UA')}</span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm text-gray-400 mb-3">
-                                        <span className="flex items-center gap-1"><Users size={14} /> {t.participants.length}/{t.maxParticipants}</span>
-                                        {t.prizePool > 0 && <span className="flex items-center gap-1 text-yellow-400"><Trophy size={14} /> {t.prizePool} <CoinIcon size={12} /></span>}
-                                        {t.entryFee > 0 && <span className="text-orange-400">Вхід: {t.entryFee} 🪙</span>}
+                                    <div className="bg-gray-800/20 group-hover:bg-yellow-500 group-hover:text-black transition-all p-3 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                        Детальніше
                                     </div>
-                                    {isJoined && (
-                                        <span className="text-xs bg-green-900/30 text-green-400 px-2 py-1 rounded">✅ Ви зареєстровані</span>
-                                    )}
-                                    <p className="text-xs text-gray-600 mt-2">{new Date(t.createdAt).toLocaleString('uk-UA')}</p>
                                 </div>
                             );
                         })}
