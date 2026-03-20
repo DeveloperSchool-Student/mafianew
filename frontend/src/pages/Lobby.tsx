@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useAppStore } from '../store';
 import { useNotificationStore } from '../store/notificationStore';
 import { useNavigate, Link } from 'react-router-dom';
