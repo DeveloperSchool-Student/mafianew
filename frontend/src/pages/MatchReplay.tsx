@@ -19,7 +19,7 @@ import {
     XCircle
 } from 'lucide-react';
 import { fetchMatchDetails } from '../services/usersApi';
-import type { MatchDetails, MatchLog, MatchParticipant } from '../services/usersApi';
+import type { MatchDetails, MatchLog } from '../services/usersApi';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface PhaseGroup {
