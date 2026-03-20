@@ -10,9 +10,11 @@
     ],
     "module": "ESNext",
     "types": [
-      "vite/client",
-      "vite-plugin-pwa/client"
-    ],
+  "vite/client",
+  "vite-plugin-pwa/client",
+  "vitest/globals",
+  "@testing-library/jest-dom"
+],
     "skipLibCheck": true,
     /* Bundler mode */
     "moduleResolution": "bundler",
