@@ -3,7 +3,8 @@ import { CoinIcon } from '../components/CoinIcon';
 import { useAppStore } from '../store';
 import { useToastStore } from '../store/toastStore';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Shield, LogOut, Swords, Check, X, Loader2 } from 'lucide-react';
+import { Users, Plus, Shield, LogOut, Swords, Check, X, Loader2, ArrowLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { UserProfile } from '../types/api';
 import * as profileApi from '../services/profileApi';
 import * as clansApi from '../services/clansApi';
@@ -12,6 +13,7 @@ export function Clans() {
     const { user } = useAppStore();
     const { addToast } = useToastStore();
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [clans, setClans] = useState<clansApi.Clan[]>([]);
     const [wars, setWars] = useState<clansApi.ClanWar[]>([]);
